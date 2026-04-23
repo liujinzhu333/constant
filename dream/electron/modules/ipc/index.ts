@@ -1,0 +1,151 @@
+/**
+ * 基座：IPC 通信注册中心
+ * 统一注册主进程与渲染进程间的通信处理器
+ * 为业务包提供安全的系统能力调用接口
+ */
+import { ipcMain, shell, app, dialog } from 'electron'
+import { Logger } from '../logger'
+import { StorageManager } from '../storage'
+import { SystemAdapter } from '../system'
+import { UpdaterModule } from '../updater'
+import { BusinessIpc } from '../business'
+
+export class IpcManager {
+  private static instance: IpcManager
+  private logger!: Logger
+
+  private constructor() {}
+
+  static getInstance(): IpcManager {
+    if (!IpcManager.instance) {
+      IpcManager.instance = new IpcManager()
+    }
+    return IpcManager.instance
+  }
+
+  register() {
+    this.logger = Logger.getInstance()
+    this.registerAppHandlers()
+    this.registerStorageHandlers()
+    this.registerNotificationHandlers()
+    this.registerSystemHandlers()
+    // 注册业务模块 IPC
+    BusinessIpc.getInstance().register()
+    this.logger.info('IPC', 'IPC 通信处理器注册完成')
+  }
+
+  // ==================== 应用信息 ====================
+  private registerAppHandlers() {
+    ipcMain.handle('app:getVersion', () => app.getVersion())
+    ipcMain.handle('app:getPlatform', () => process.platform)
+    ipcMain.handle('app:getPath', (_event, name: Parameters<typeof app.getPath>[0]) => {
+      return app.getPath(name)
+    })
+
+    ipcMain.handle('app:openExternal', async (_event, url: string) => {
+      // 只允许 https 链接
+      if (url.startsWith('https://')) {
+        await shell.openExternal(url)
+        return true
+      }
+      return false
+    })
+
+    ipcMain.handle('app:showOpenDialog', async (_event, options: Electron.OpenDialogOptions) => {
+      return dialog.showOpenDialog(options)
+    })
+
+    ipcMain.handle('app:showSaveDialog', async (_event, options: Electron.SaveDialogOptions) => {
+      return dialog.showSaveDialog(options)
+    })
+
+    ipcMain.handle('app:minimize', (_event) => {
+      const win = SystemAdapter.getInstance()
+      // @ts-ignore
+      win.mainWindow?.minimize()
+    })
+
+    ipcMain.handle('app:quit', () => {
+      app.isQuitting = true
+      app.quit()
+    })
+  }
+
+  // ==================== 加密存储 ====================
+  private registerStorageHandlers() {
+    const storage = StorageManager.getInstance()
+
+    ipcMain.handle('store:set', (_event, namespace: string, key: string, value: unknown) => {
+      try {
+        storage.encryptedSet(namespace, key, value)
+        return { success: true }
+      } catch (err) {
+        this.logger.error('IPC', 'store:set 失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:get', (_event, namespace: string, key: string) => {
+      try {
+        const value = storage.encryptedGet(namespace, key)
+        return { success: true, value }
+      } catch (err) {
+        this.logger.error('IPC', 'store:get 失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:delete', (_event, namespace: string, key: string) => {
+      try {
+        storage.encryptedDelete(namespace, key)
+        return { success: true }
+      } catch (err) {
+        this.logger.error('IPC', 'store:delete 失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:backup', async () => {
+      try {
+        const backupPath = storage.backup()
+        return { success: true, path: backupPath }
+      } catch (err) {
+        this.logger.error('IPC', '备份失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:getMeta', (_event, key: string) => {
+      return storage.getMeta(key)
+    })
+  }
+
+  // ==================== 系统通知 ====================
+  private registerNotificationHandlers() {
+    const system = SystemAdapter.getInstance()
+
+    ipcMain.handle('notification:send', (_event, options: {
+      title: string
+      body: string
+      silent?: boolean
+    }) => {
+      system.sendNotification(options)
+      return { success: true }
+    })
+  }
+
+  // ==================== 系统信息 ====================
+  private registerSystemHandlers() {
+    ipcMain.handle('system:log', (_event, level: 'debug' | 'info' | 'warn' | 'error', module: string, message: string) => {
+      this.logger[level](module, `[Renderer] ${message}`)
+    })
+
+    ipcMain.handle('system:getLogDir', () => {
+      return this.logger.getLogDir()
+    })
+
+    ipcMain.handle('updater:rollback', async () => {
+      return UpdaterModule.getInstance().rollback()
+    })
+  }
+}
