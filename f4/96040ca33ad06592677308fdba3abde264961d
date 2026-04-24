@@ -1,0 +1,27 @@
+dream/package.json
+  3d2c8da27e7780b6 69,78
+dream/src/views/HomeView.vue
+  3d2c8da27e7780b6 6,90
+dream/index.html
+  3d2c8da27e7780b6 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f496040ca33ad06592677308fdba3abde264961d",
+  "prompts": {
+    "3d2c8da27e7780b6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_24a8f8773ffeCMYEaCwdGG9A6S",
+        "model": "unknown"
+      },
+      "human_author": "liujinzhu",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 5,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
