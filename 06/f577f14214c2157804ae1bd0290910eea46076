@@ -1,0 +1,23 @@
+dream/CONTEXT.md
+  3d2c8da27e7780b6 1-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "06f577f14214c2157804ae1bd0290910eea46076",
+  "prompts": {
+    "3d2c8da27e7780b6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_24a8f8773ffeCMYEaCwdGG9A6S",
+        "model": "unknown"
+      },
+      "human_author": "liujinzhu",
+      "messages": [],
+      "total_additions": 240,
+      "total_deletions": 0,
+      "accepted_lines": 240,
+      "overriden_lines": 0
+    }
+  }
+}
