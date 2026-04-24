@@ -3,7 +3,7 @@
     <!-- 侧边导航 -->
     <nav class="sidebar">
       <div class="sidebar-logo">
-        <div class="logo-icon">D</div>
+        <img src="/logo.png" class="logo-icon" alt="Dream" />
         <span class="logo-text">Dream</span>
       </div>
 
@@ -87,8 +87,7 @@ onMounted(async () => {
 }
 .logo-icon {
   width: 32px; height: 32px; border-radius: var(--radius-sm);
-  background: var(--color-accent); color: #fff;
-  font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  object-fit: cover;
 }
 .logo-text { font-size: 16px; font-weight: 600; color: var(--color-text); }
 
