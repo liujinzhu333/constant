@@ -82,8 +82,10 @@
       "allowToChangeInstallationDirectory": true
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://update.dream-app.com/releases/"
+      "provider": "github",
+      "owner": "liujinzhu333",
+      "repo": "constant",
+      "releaseType": "release"
     }
   }
 }

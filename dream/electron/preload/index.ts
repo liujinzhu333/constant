@@ -20,7 +20,8 @@ export interface StudyPlan {
   category: PlanCategory
   status: string; start_date: number | null; end_date: number | null
   progress: number; color: string; created_at: number; updated_at: number
-  taskCount?: number; doneCount?: number
+  parent_id: string | null
+  taskCount?: number; doneCount?: number; subPlanCount?: number
 }
 
 export interface StudyTask {
@@ -81,6 +82,10 @@ export interface DreamAPI {
     warn: (module: string, message: string) => void
     error: (module: string, message: string) => void
     getLogDir: () => Promise<string>
+    getFiles: () => Promise<Array<{ name: string; date: string; size: number; isToday: boolean }>>
+    readFile: (filename: string, maxLines?: number) => Promise<{ lines: string[]; total: number }>
+    deleteFile: (filename: string) => Promise<{ success: boolean; error?: string }>
+    clearAll: () => Promise<{ success: boolean; deleted: number; error?: string }>
   }
   // ========== 业务模块 ==========
   todo: {
@@ -93,9 +98,10 @@ export interface DreamAPI {
   }
   study: {
     planList: (category?: string) => Promise<StudyPlan[]>
-    planAdd: (data: { title: string; description?: string; goal?: string; category?: string; start_date?: number; end_date?: number; color?: string }) => Promise<StudyPlan>
+    planAdd: (data: { title: string; description?: string; goal?: string; category?: string; start_date?: number; end_date?: number; color?: string; parent_id?: string }) => Promise<StudyPlan>
     planUpdate: (id: string, data: Partial<StudyPlan>) => Promise<StudyPlan>
     planDelete: (id: string) => Promise<boolean>
+    subPlanList: (parentId: string) => Promise<StudyPlan[]>
     taskList: (planId: string) => Promise<StudyTask[]>
     taskAdd: (planId: string, data: { title: string; due_at?: number }) => Promise<StudyTask>
     taskDone: (id: string, planId: string) => Promise<boolean>
@@ -171,7 +177,11 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     info: (module: string, message: string) => ipcRenderer.invoke('system:log', 'info', module, message),
     warn: (module: string, message: string) => ipcRenderer.invoke('system:log', 'warn', module, message),
     error: (module: string, message: string) => ipcRenderer.invoke('system:log', 'error', module, message),
-    getLogDir: () => ipcRenderer.invoke('system:getLogDir')
+    getLogDir: () => ipcRenderer.invoke('system:getLogDir'),
+    getFiles: () => ipcRenderer.invoke('log:getFiles'),
+    readFile: (filename: string, maxLines?: number) => ipcRenderer.invoke('log:readFile', filename, maxLines),
+    deleteFile: (filename: string) => ipcRenderer.invoke('log:deleteFile', filename),
+    clearAll: () => ipcRenderer.invoke('log:clearAll'),
   },
   // ========== 业务模块 ==========
   todo: {
@@ -187,6 +197,7 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     planAdd: (data: Record<string, unknown>) => ipcRenderer.invoke('study:planAdd', data),
     planUpdate: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('study:planUpdate', id, data),
     planDelete: (id: string) => ipcRenderer.invoke('study:planDelete', id),
+    subPlanList: (parentId: string) => ipcRenderer.invoke('study:subPlanList', parentId),
     taskList: (planId: string) => ipcRenderer.invoke('study:taskList', planId),
     taskAdd: (planId: string, data: Record<string, unknown>) => ipcRenderer.invoke('study:taskAdd', planId, data),
     taskDone: (id: string, planId: string) => ipcRenderer.invoke('study:taskDone', id, planId),

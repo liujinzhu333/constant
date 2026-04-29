@@ -84,31 +84,48 @@ export class BusinessIpc {
 
   // ===================== 计划 =====================
   private registerStudy() {
-    // 支持按 category 筛选
+    // 顶层计划列表（parent_id IS NULL），支持按 category 筛选
     ipcMain.handle('study:planList', (_e, category?: string) => {
-      let sql = 'SELECT * FROM study_plans'
+      let sql = 'SELECT * FROM study_plans WHERE parent_id IS NULL'
       const params: unknown[] = []
-      if (category && category !== 'all') { sql += ' WHERE category = ?'; params.push(category) }
+      if (category && category !== 'all') { sql += ' AND category = ?'; params.push(category) }
       sql += ' ORDER BY created_at DESC'
       const plans = this.db.prepare(sql).all(...params) as Array<Record<string, unknown>>
       return plans.map(p => ({
         ...p,
         taskCount: (this.db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ?').get(p.id) as { c: number }).c,
         doneCount: (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'done'").get(p.id) as { c: number }).c,
+        subPlanCount: (this.db.prepare('SELECT COUNT(*) as c FROM study_plans WHERE parent_id = ?').get(p.id) as { c: number }).c,
+      }))
+    })
+
+    // 子计划列表
+    ipcMain.handle('study:subPlanList', (_e, parentId: string) => {
+      const plans = this.db.prepare(
+        'SELECT * FROM study_plans WHERE parent_id = ? ORDER BY created_at ASC'
+      ).all(parentId) as Array<Record<string, unknown>>
+      return plans.map(p => ({
+        ...p,
+        taskCount: (this.db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ?').get(p.id) as { c: number }).c,
+        doneCount: (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'done'").get(p.id) as { c: number }).c,
+        subPlanCount: 0,
       }))
     })
 
     ipcMain.handle('study:planAdd', (_e, data: {
-      title: string; description?: string; goal?: string; category?: string; start_date?: number; end_date?: number; color?: string
+      title: string; description?: string; goal?: string; category?: string
+      start_date?: number; end_date?: number; color?: string; parent_id?: string
     }) => {
       const id = uuid()
       this.db.prepare(`
-        INSERT INTO study_plans (id, title, description, goal, category, start_date, end_date, color, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO study_plans (id, title, description, goal, category, start_date, end_date, color, parent_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, data.title, data.description ?? '', data.goal ?? '',
         data.category ?? 'study',
-        data.start_date ?? null, data.end_date ?? null, data.color ?? '#0071e3', now(), now())
-      return this.db.prepare('SELECT * FROM study_plans WHERE id = ?').get(id)
+        data.start_date ?? null, data.end_date ?? null, data.color ?? '#0071e3',
+        data.parent_id ?? null, now(), now())
+      const plan = this.db.prepare('SELECT * FROM study_plans WHERE id = ?').get(id) as Record<string, unknown>
+      return { ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 }
     })
 
     ipcMain.handle('study:planUpdate', (_e, id: string, data: Partial<{

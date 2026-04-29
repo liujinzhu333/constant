@@ -134,7 +134,7 @@ export class IpcManager {
     })
   }
 
-  // ==================== 系统信息 ====================
+  // ==================== 系统信息 + 日志管理 ====================
   private registerSystemHandlers() {
     ipcMain.handle('system:log', (_event, level: 'debug' | 'info' | 'warn' | 'error', module: string, message: string) => {
       this.logger[level](module, `[Renderer] ${message}`)
@@ -142,6 +142,26 @@ export class IpcManager {
 
     ipcMain.handle('system:getLogDir', () => {
       return this.logger.getLogDir()
+    })
+
+    // 获取日志文件列表
+    ipcMain.handle('log:getFiles', () => {
+      return this.logger.getLogFiles()
+    })
+
+    // 读取指定日志文件内容
+    ipcMain.handle('log:readFile', (_event, filename: string, maxLines?: number) => {
+      return this.logger.readLogFile(filename, maxLines)
+    })
+
+    // 删除指定日志文件
+    ipcMain.handle('log:deleteFile', (_event, filename: string) => {
+      return this.logger.deleteLogFile(filename)
+    })
+
+    // 清空所有历史日志（保留今天）
+    ipcMain.handle('log:clearAll', () => {
+      return this.logger.clearAllLogs()
     })
 
     ipcMain.handle('updater:rollback', async () => {

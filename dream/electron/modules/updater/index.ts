@@ -133,20 +133,34 @@ export class UpdaterModule {
 
   /**
    * 检测更新
+   * 使用语义化版本比较（远端版本 > 本地版本才算有更新，避免误触降级）
    */
   async checkForUpdates(): Promise<{ hasUpdate: boolean; version?: string }> {
     try {
       const result = await autoUpdater.checkForUpdates()
       if (!result) return { hasUpdate: false }
-      const hasUpdate = result.updateInfo.version !== autoUpdater.currentVersion.version
-      return {
-        hasUpdate,
-        version: result.updateInfo.version
-      }
+      const remoteVer = result.updateInfo.version
+      const localVer = autoUpdater.currentVersion.version
+      const hasUpdate = this.semverGt(remoteVer, localVer)
+      this.logger.info('Updater', `版本对比: local=${localVer} remote=${remoteVer} hasUpdate=${hasUpdate}`)
+      return { hasUpdate, version: remoteVer }
     } catch (err) {
       this.logger.error('Updater', '检测更新失败', err)
       return { hasUpdate: false }
     }
+  }
+
+  /**
+   * 简单 semver 比较：a > b 返回 true
+   * 格式：MAJOR.MINOR.PATCH，不含预发布标签
+   */
+  private semverGt(a: string, b: string): boolean {
+    const parse = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0)
+    const [aMaj, aMin, aPat] = parse(a)
+    const [bMaj, bMin, bPat] = parse(b)
+    if (aMaj !== bMaj) return aMaj > bMaj
+    if (aMin !== bMin) return aMin > bMin
+    return aPat > bPat
   }
 
   /**

@@ -199,10 +199,14 @@ export class StorageManager {
         );
       `)
 
-      // 数据迁移：study_plans 表补充 category 字段（兼容旧数据库）
+      // 数据迁移：兼容旧数据库
       const cols = (this.db!.prepare("PRAGMA table_info(study_plans)").all() as Array<{ name: string }>).map(c => c.name)
       if (!cols.includes('category')) {
         this.db!.exec("ALTER TABLE study_plans ADD COLUMN category TEXT NOT NULL DEFAULT 'study'")
+      }
+      // 子计划支持：parent_id 为空表示顶层计划
+      if (!cols.includes('parent_id')) {
+        this.db!.exec("ALTER TABLE study_plans ADD COLUMN parent_id TEXT REFERENCES study_plans(id) ON DELETE CASCADE")
       }
 
       // 记录基座版本
