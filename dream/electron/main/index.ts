@@ -18,6 +18,16 @@ if (isDev) {
 app.commandLine.appendSwitch('--disable-gpu')
 app.commandLine.appendSwitch('--disable-software-rasterizer')
 
+// 主进程全局异常兜底，防止 uncaughtException / unhandledRejection 导致渲染进程白屏
+process.on('uncaughtException', (err) => {
+  console.error('[Main] uncaughtException:', err)
+  // 不退出进程，让应用继续运行
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[Main] unhandledRejection:', reason)
+  // 不退出进程
+})
+
 // 注册 IPC 处理器（需在 app.whenReady 前注册）
 IpcManager.getInstance().register()
 

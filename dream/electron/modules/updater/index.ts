@@ -34,6 +34,8 @@ export class UpdaterModule {
   private storage!: StorageManager
   private mainWindow: BrowserWindow | null = null
   private currentStatus: UpdateStatus = 'not-available'
+  /** 是否由用户主动触发检测（false = 启动时自动检测，静默失败） */
+  private userTriggered = false
 
   private constructor() {}
 
@@ -105,14 +107,18 @@ export class UpdaterModule {
     autoUpdater.on('error', (err) => {
       this.setStatus('error')
       this.logger.error('Updater', '热更新异常', err)
-      this.sendToRenderer('updater:error', { message: err.message })
+      // 仅当用户主动触发检测时才通知渲染进程，自动检测静默失败不推送
+      // 通过 this.userTriggered 区分
+      if (this.userTriggered) {
+        this.sendToRenderer('updater:error', { message: err.message })
+      }
     })
   }
 
   private registerIPC() {
-    // 检查更新
+    // 检查更新（用户主动触发，错误会推送到渲染进程）
     ipcMain.handle('updater:check', async () => {
-      return this.checkForUpdates()
+      return this.checkForUpdates(true)
     })
 
     // 开始下载
@@ -135,7 +141,8 @@ export class UpdaterModule {
    * 检测更新
    * 使用语义化版本比较（远端版本 > 本地版本才算有更新，避免误触降级）
    */
-  async checkForUpdates(): Promise<{ hasUpdate: boolean; version?: string }> {
+  async checkForUpdates(userTriggered = false): Promise<{ hasUpdate: boolean; version?: string }> {
+    this.userTriggered = userTriggered
     try {
       const result = await autoUpdater.checkForUpdates()
       if (!result) return { hasUpdate: false }
@@ -146,7 +153,10 @@ export class UpdaterModule {
       return { hasUpdate, version: remoteVer }
     } catch (err) {
       this.logger.error('Updater', '检测更新失败', err)
+      // 静默失败：不抛出，不影响渲染进程
       return { hasUpdate: false }
+    } finally {
+      this.userTriggered = false
     }
   }
 

@@ -109,9 +109,13 @@ export class StartupManager {
     const elapsed = Date.now() - this.startTime
     logger.info('Startup', `基座启动完成，耗时: ${elapsed}ms`)
 
-    // 非生产环境自动检查更新
+    // 生产环境：启动 5 秒后静默检查更新（失败不影响 UI）
     if (!isDev) {
-      setTimeout(() => updater.checkForUpdates(), 5000)
+      setTimeout(() => {
+        updater.checkForUpdates(false).catch(() => {
+          // 彻底吞掉，防止 unhandledRejection 导致白屏
+        })
+      }, 5000)
     }
   }
 
