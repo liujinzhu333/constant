@@ -321,6 +321,84 @@ export class StorageManager {
     return backupPath
   }
 
+  /**
+   * 列出所有历史备份文件（按时间降序）
+   */
+  listBackups(): Array<{ name: string; path: string; size: number; createdAt: number }> {
+    const backupDir = path.join(this.userDataPath, 'backups')
+    if (!fs.existsSync(backupDir)) return []
+    return fs.readdirSync(backupDir)
+      .filter(f => f.endsWith('.db'))
+      .map(f => {
+        const fullPath = path.join(backupDir, f)
+        const stat = fs.statSync(fullPath)
+        return { name: f, path: fullPath, size: stat.size, createdAt: stat.birthtimeMs }
+      })
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  /**
+   * 删除指定备份文件
+   */
+  deleteBackup(backupPath: string): void {
+    // 安全检查：只允许删除 backups 目录内的文件
+    const backupDir = path.join(this.userDataPath, 'backups')
+    if (!backupPath.startsWith(backupDir)) throw new Error('非法路径')
+    if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath)
+  }
+
+  /**
+   * 从内部历史备份恢复数据库
+   * 先关闭当前连接，覆盖 db 文件，再重新连接并迁移
+   */
+  restoreBackup(backupPath: string): void {
+    // 安全检查：只允许从 backups 目录恢复
+    const backupDir = path.join(this.userDataPath, 'backups')
+    if (!backupPath.startsWith(backupDir)) throw new Error('非法路径')
+    if (!fs.existsSync(backupPath)) throw new Error('备份文件不存在')
+
+    // 先备份当前数据库（防止恢复失败造成数据丢失）
+    const safetyPath = path.join(backupDir, `pre-restore-${Date.now()}.db`)
+    this.db!.backup(safetyPath)
+
+    // 关闭当前连接
+    this.db!.close()
+    this.db = null
+
+    // 覆盖主数据库文件
+    fs.copyFileSync(backupPath, this.dbPath)
+
+    // 重新初始化（含迁移守卫）
+    this.initDatabase()
+  }
+
+  /**
+   * 导入外部备份文件（用户通过文件选择器选择任意 .db）
+   */
+  importBackup(srcPath: string): void {
+    if (!fs.existsSync(srcPath)) throw new Error('文件不存在')
+
+    // 验证是否为有效的 SQLite 文件（读取魔数）
+    const magic = Buffer.alloc(16)
+    const fd = fs.openSync(srcPath, 'r')
+    fs.readSync(fd, magic, 0, 16, 0)
+    fs.closeSync(fd)
+    if (magic.toString('utf8', 0, 16) !== 'SQLite format 3\u0000') {
+      throw new Error('不是有效的 SQLite 数据库文件')
+    }
+
+    // 先做安全备份
+    const backupDir = path.join(this.userDataPath, 'backups')
+    const safetyPath = path.join(backupDir, `pre-import-${Date.now()}.db`)
+    this.db!.backup(safetyPath)
+
+    this.db!.close()
+    this.db = null
+
+    fs.copyFileSync(srcPath, this.dbPath)
+    this.initDatabase()
+  }
+
   // ==================== 工具 ====================
 
   getDb(): Database.Database {

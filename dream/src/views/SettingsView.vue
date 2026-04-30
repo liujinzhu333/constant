@@ -52,14 +52,42 @@
       <section class="settings-section">
         <h2 class="section-title">数据</h2>
         <el-card shadow="never">
+          <!-- 数据目录 -->
           <el-descriptions :column="1" border>
             <el-descriptions-item label="数据目录">
               <el-text class="path-text">{{ dataPath }}</el-text>
             </el-descriptions-item>
           </el-descriptions>
-          <div style="margin-top:16px;display:flex;gap:10px">
-            <el-button type="primary" @click="backup">备份数据</el-button>
+
+          <!-- 操作按钮 -->
+          <div class="data-actions">
+            <el-button type="primary" :loading="backingUp" @click="backup">备份数据</el-button>
             <el-button @click="openDataDir">打开目录</el-button>
+            <el-button @click="importBackup" :loading="importing">导入备份</el-button>
+          </div>
+
+          <!-- 历史备份列表 -->
+          <div class="backup-section">
+            <div class="backup-header">
+              <span class="backup-title">历史备份</span>
+              <el-button link size="small" @click="loadBackups" :loading="backupLoading">刷新</el-button>
+            </div>
+
+            <el-empty v-if="backups.length === 0 && !backupLoading" description="暂无备份文件" :image-size="48" />
+
+            <div v-else class="backup-list" v-loading="backupLoading">
+              <div v-for="bk in backups" :key="bk.path" class="backup-item">
+                <div class="backup-item-info">
+                  <span class="backup-name">{{ formatBackupName(bk.name) }}</span>
+                  <span class="backup-meta">{{ formatSize(bk.size) }}</span>
+                </div>
+                <div class="backup-item-actions">
+                  <el-button link size="small" @click="showInFolder(bk.path)">显示</el-button>
+                  <el-button link size="small" type="primary" @click="restoreBackup(bk)">恢复</el-button>
+                  <el-button link size="small" type="danger" @click="deleteBackup(bk)">删除</el-button>
+                </div>
+              </div>
+            </div>
           </div>
         </el-card>
       </section>
@@ -126,6 +154,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
+import type { BackupInfo } from '../../../electron/preload/index'
 
 const baseVersion = ref('1.0.0')
 const platform = ref('-')
@@ -134,6 +163,10 @@ const logDir = ref('-')
 const updateStatus = ref('not-available')
 const updateProgress = ref(0)
 const isChecking = ref(false)
+const backingUp = ref(false)
+const importing = ref(false)
+const backupLoading = ref(false)
+const backups = ref<BackupInfo[]>([])
 
 // 日志查看器
 type LogFileInfo = { name: string; date: string; size: number; isToday: boolean }
@@ -175,6 +208,8 @@ onMounted(async () => {
   updateStatus.value = await api.updater.getStatus()
   // 加载日志文件列表，默认打开今天的日志
   await refreshLogFiles(true)
+  // 加载备份列表
+  await loadBackups()
   removeStatusListener = api.updater.onStatus(async (data) => {
     updateStatus.value = data.status
     // 下载完成后弹出安装确认
@@ -253,21 +288,135 @@ async function rollback() {
 
 async function backup() {
   const api = window.dreamAPI
-  if (!api) return
-  const result = await api.store.backup()
-  if (result.success) {
-    ElMessage.success(`备份成功！路径: ${result.path}`)
-  } else {
-    ElMessage.error(`备份失败: ${result.error}`)
+  if (!api || backingUp.value) return
+  backingUp.value = true
+  try {
+    const result = await api.store.backup()
+    if (result.success && result.path) {
+      await loadBackups()
+      const backupPath = result.path
+      try {
+        await ElMessageBox({
+          title: '备份成功',
+          message: `
+            <div style="font-size:13px;line-height:1.8;">
+              <div style="margin-bottom:8px;color:var(--el-text-color-secondary);">备份文件已保存至：</div>
+              <div style="
+                font-family:'SF Mono','Fira Code',monospace;font-size:11px;
+                background:var(--el-fill-color-light);border-radius:4px;
+                padding:8px 10px;word-break:break-all;user-select:text;cursor:text;
+              ">${backupPath}</div>
+            </div>
+          `,
+          dangerouslyUseHTMLString: true,
+          showCancelButton: true,
+          confirmButtonText: '在 Finder 中显示',
+          cancelButtonText: '关闭',
+          type: 'success',
+        })
+        await api.app.showInFolder(backupPath)
+      } catch { /* 用户关闭弹窗 */ }
+    } else {
+      ElMessage.error(`备份失败: ${result.error}`)
+    }
+  } finally {
+    backingUp.value = false
   }
 }
 
 async function openDataDir() {
-  await window.dreamAPI?.app.openExternal(`file://${dataPath.value}`)
+  await window.dreamAPI?.app.showInFolder(dataPath.value)
+}
+
+async function showInFolder(filePath: string) {
+  await window.dreamAPI?.app.showInFolder(filePath)
+}
+
+async function loadBackups() {
+  const api = window.dreamAPI
+  if (!api) return
+  backupLoading.value = true
+  try {
+    const result = await api.store.listBackups()
+    if (result.success) backups.value = result.backups
+  } finally {
+    backupLoading.value = false
+  }
+}
+
+async function restoreBackup(bk: BackupInfo) {
+  const api = window.dreamAPI
+  if (!api) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要恢复到备份「${formatBackupName(bk.name)}」吗？\n\n当前数据库将被覆盖，操作前会自动生成一份安全备份。`,
+      '恢复备份',
+      { confirmButtonText: '确定恢复', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: false }
+    )
+    const result = await api.store.restoreBackup(bk.path)
+    if (result.success) {
+      await loadBackups()
+      await ElMessageBox.alert(
+        '数据已恢复成功。由于数据库已重新加载，建议重启应用以确保所有模块状态同步。',
+        '恢复成功',
+        { confirmButtonText: '稍后重启', type: 'success' }
+      )
+    } else {
+      ElMessage.error(`恢复失败: ${result.error}`)
+    }
+  } catch { /* 用户取消 */ }
+}
+
+async function importBackup() {
+  const api = window.dreamAPI
+  if (!api || importing.value) return
+  importing.value = true
+  try {
+    const result = await api.store.importBackup()
+    if (result.canceled) return
+    if (result.success) {
+      await loadBackups()
+      await ElMessageBox.alert(
+        '外部备份文件已导入成功。建议重启应用以确保所有模块状态同步。',
+        '导入成功',
+        { confirmButtonText: '稍后重启', type: 'success' }
+      )
+    } else {
+      ElMessage.error(`导入失败: ${result.error}`)
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
+async function deleteBackup(bk: BackupInfo) {
+  const api = window.dreamAPI
+  if (!api) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除备份「${formatBackupName(bk.name)}」？此操作不可撤销。`,
+      '删除备份',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    const result = await api.store.deleteBackup(bk.path)
+    if (result.success) {
+      backups.value = backups.value.filter(b => b.path !== bk.path)
+      ElMessage.success('已删除')
+    } else {
+      ElMessage.error(`删除失败: ${result.error}`)
+    }
+  } catch { /* 用户取消 */ }
+}
+
+function formatBackupName(name: string): string {
+  // dream-backup-2026-04-30T03-26-00-000Z.db → 2026-04-30 03:26:00
+  const m = name.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/)
+  if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`
+  return name.replace(/^dream-backup-/, '').replace(/\.db$/, '')
 }
 
 async function openLogDir() {
-  await window.dreamAPI?.app.openExternal(`file://${logDir.value}`)
+  await window.dreamAPI?.app.showInFolder(logDir.value)
 }
 
 // ==================== 日志查看器 ====================
@@ -403,6 +552,68 @@ function logLineClass(line: string): string {
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 11px; word-break: break-all;
 }
+
+.data-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* 消除 EP 相邻 button margin */
+.data-actions :deep(.el-button + .el-button) { margin-left: 0; }
+
+.backup-section { margin-top: 20px; }
+.backup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.backup-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--el-fill-color-light);
+  transition: background var(--duration-fast);
+}
+.backup-item:hover { background: var(--el-fill-color); }
+.backup-item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.backup-name {
+  font-size: 13px;
+  color: var(--color-text);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.backup-meta {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.backup-item-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.backup-item-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.backup-item-actions :deep(.el-button) { padding: 0 6px; font-size: 12px; }
 
 /* 日志查看器 */
 .log-toolbar {

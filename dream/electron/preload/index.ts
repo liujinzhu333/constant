@@ -45,6 +45,13 @@ export interface Reminder {
   title: string; body: string; remind_at: number; status: string; created_at: number
 }
 
+export interface BackupInfo {
+  name: string
+  path: string
+  size: number
+  createdAt: number
+}
+
 export type AccountCategory =
   | 'dev'       // 开发工具（GitHub、GitLab、云服务…）
   | 'social'    // 社交媒体（微博、Twitter、小红书…）
@@ -75,6 +82,7 @@ export interface DreamAPI {
     getPlatform: () => Promise<string>
     getPath: (name: string) => Promise<string>
     openExternal: (url: string) => Promise<boolean>
+    showInFolder: (filePath: string) => Promise<boolean>
     showOpenDialog: (options: Electron.OpenDialogOptions) => Promise<Electron.OpenDialogReturnValue>
     showSaveDialog: (options: Electron.SaveDialogOptions) => Promise<Electron.SaveDialogReturnValue>
     minimize: () => Promise<void>
@@ -85,6 +93,10 @@ export interface DreamAPI {
     get: (namespace: string, key: string) => Promise<{ success: boolean; value?: unknown; error?: string }>
     delete: (namespace: string, key: string) => Promise<{ success: boolean; error?: string }>
     backup: () => Promise<{ success: boolean; path?: string; error?: string }>
+    listBackups: () => Promise<{ success: boolean; backups: BackupInfo[]; error?: string }>
+    deleteBackup: (backupPath: string) => Promise<{ success: boolean; error?: string }>
+    restoreBackup: (backupPath: string) => Promise<{ success: boolean; error?: string }>
+    importBackup: () => Promise<{ success: boolean; canceled?: boolean; error?: string }>
     getMeta: (key: string) => Promise<string | null>
   }
   notification: {
@@ -171,6 +183,7 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
     getPath: (name: string) => ipcRenderer.invoke('app:getPath', name),
     openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+    showInFolder: (filePath: string) => ipcRenderer.invoke('app:showInFolder', filePath),
     showOpenDialog: (options: Electron.OpenDialogOptions) => ipcRenderer.invoke('app:showOpenDialog', options),
     showSaveDialog: (options: Electron.SaveDialogOptions) => ipcRenderer.invoke('app:showSaveDialog', options),
     minimize: () => ipcRenderer.invoke('app:minimize'),
@@ -181,6 +194,10 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     get: (namespace: string, key: string) => ipcRenderer.invoke('store:get', namespace, key),
     delete: (namespace: string, key: string) => ipcRenderer.invoke('store:delete', namespace, key),
     backup: () => ipcRenderer.invoke('store:backup'),
+    listBackups: () => ipcRenderer.invoke('store:listBackups'),
+    deleteBackup: (backupPath: string) => ipcRenderer.invoke('store:deleteBackup', backupPath),
+    restoreBackup: (backupPath: string) => ipcRenderer.invoke('store:restoreBackup', backupPath),
+    importBackup: () => ipcRenderer.invoke('store:importBackup'),
     getMeta: (key: string) => ipcRenderer.invoke('store:getMeta', key)
   },
   notification: {

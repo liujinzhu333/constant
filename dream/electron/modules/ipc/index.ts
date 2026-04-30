@@ -51,6 +51,12 @@ export class IpcManager {
       return false
     })
 
+    // 在系统文件管理器中显示指定路径（文件则选中，目录则打开）
+    ipcMain.handle('app:showInFolder', (_event, filePath: string) => {
+      shell.showItemInFolder(filePath)
+      return true
+    })
+
     ipcMain.handle('app:showOpenDialog', async (_event, options: Electron.OpenDialogOptions) => {
       return dialog.showOpenDialog(options)
     })
@@ -111,6 +117,58 @@ export class IpcManager {
         return { success: true, path: backupPath }
       } catch (err) {
         this.logger.error('IPC', '备份失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:listBackups', () => {
+      try {
+        return { success: true, backups: storage.listBackups() }
+      } catch (err) {
+        this.logger.error('IPC', 'listBackups 失败', err)
+        return { success: false, error: (err as Error).message, backups: [] }
+      }
+    })
+
+    ipcMain.handle('store:deleteBackup', (_event, backupPath: string) => {
+      try {
+        storage.deleteBackup(backupPath)
+        return { success: true }
+      } catch (err) {
+        this.logger.error('IPC', 'deleteBackup 失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:restoreBackup', (_event, backupPath: string) => {
+      try {
+        storage.restoreBackup(backupPath)
+        this.logger.info('IPC', `数据库已从备份恢复: ${backupPath}`)
+        return { success: true }
+      } catch (err) {
+        this.logger.error('IPC', 'restoreBackup 失败', err)
+        return { success: false, error: (err as Error).message }
+      }
+    })
+
+    ipcMain.handle('store:importBackup', async () => {
+      try {
+        // 弹出文件选择器让用户选择 .db 文件
+        const { BrowserWindow } = await import('electron')
+        const win = BrowserWindow.getFocusedWindow()
+        const result = await dialog.showOpenDialog(win!, {
+          title: '选择备份文件',
+          filters: [{ name: 'Dream 备份', extensions: ['db'] }],
+          properties: ['openFile']
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { success: false, canceled: true }
+        }
+        storage.importBackup(result.filePaths[0])
+        this.logger.info('IPC', `数据库已从外部文件导入: ${result.filePaths[0]}`)
+        return { success: true }
+      } catch (err) {
+        this.logger.error('IPC', 'importBackup 失败', err)
         return { success: false, error: (err as Error).message }
       }
     })
