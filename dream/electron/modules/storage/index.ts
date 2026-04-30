@@ -198,6 +198,20 @@ export class StorageManager {
           created_at  INTEGER DEFAULT (strftime('%s', 'now'))
         );
 
+        -- ===================== 业务包：收藏 =====================
+        CREATE TABLE IF NOT EXISTS favorites (
+          id          TEXT PRIMARY KEY,
+          type        TEXT NOT NULL DEFAULT 'link', -- link | quote
+          title       TEXT NOT NULL DEFAULT '',     -- 标题（链接标题 / 名言摘要）
+          url         TEXT NOT NULL DEFAULT '',     -- 网页链接（type=link 时使用）
+          content     TEXT NOT NULL DEFAULT '',     -- 名言内容（type=quote 时使用）
+          author      TEXT NOT NULL DEFAULT '',     -- 作者/来源
+          tags        TEXT NOT NULL DEFAULT '[]',   -- 标签 JSON 数组
+          is_pinned   INTEGER NOT NULL DEFAULT 0,
+          created_at  INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at  INTEGER DEFAULT (strftime('%s', 'now'))
+        );
+
         -- ===================== 业务包：账号管理 =====================
         CREATE TABLE IF NOT EXISTS accounts (
           id           TEXT PRIMARY KEY,

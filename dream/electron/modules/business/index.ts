@@ -30,6 +30,7 @@ export class BusinessIpc {
     this.registerSchedule()
     this.registerReminder()
     this.registerAccount()
+    this.registerFavorite()
     this.logger.info('Business', '业务 IPC 处理器注册完成')
   }
 
@@ -356,6 +357,72 @@ export class BusinessIpc {
     // 删除账号
     ipcMain.handle('account:delete', (_e, id: string) => {
       this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id)
+      return true
+    })
+  }
+
+  // ===================== 收藏 =====================
+  private registerFavorite() {
+    // 列表（支持按 type 筛选 + 关键词搜索）
+    ipcMain.handle('favorite:list', (_e, filter: { type?: string; keyword?: string } = {}) => {
+      let sql = 'SELECT * FROM favorites WHERE 1=1'
+      const params: unknown[] = []
+      if (filter.type && filter.type !== 'all') {
+        sql += ' AND type = ?'; params.push(filter.type)
+      }
+      if (filter.keyword) {
+        sql += ' AND (title LIKE ? OR content LIKE ? OR author LIKE ?)'
+        const kw = `%${filter.keyword}%`
+        params.push(kw, kw, kw)
+      }
+      sql += ' ORDER BY is_pinned DESC, created_at DESC'
+      return this.db.prepare(sql).all(...params)
+    })
+
+    // 新增
+    ipcMain.handle('favorite:add', (_e, data: {
+      type: string
+      title?: string
+      url?: string
+      content?: string
+      author?: string
+      tags?: string[]
+    }) => {
+      const id = uuid()
+      this.db.prepare(`
+        INSERT INTO favorites (id, type, title, url, content, author, tags, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, data.type,
+        data.title ?? '', data.url ?? '',
+        data.content ?? '', data.author ?? '',
+        JSON.stringify(data.tags ?? []),
+        now(), now()
+      )
+      return this.db.prepare('SELECT * FROM favorites WHERE id = ?').get(id)
+    })
+
+    // 更新
+    ipcMain.handle('favorite:update', (_e, id: string, data: Partial<{
+      title: string; url: string; content: string; author: string
+      tags: string[]; is_pinned: number
+    }>) => {
+      const fields = Object.keys(data).map(k => `${k} = ?`).join(', ')
+      const vals = Object.values(data).map(v => Array.isArray(v) ? JSON.stringify(v) : v)
+      if (!fields) return null
+      this.db.prepare(`UPDATE favorites SET ${fields}, updated_at = ? WHERE id = ?`).run(...vals, now(), id)
+      return this.db.prepare('SELECT * FROM favorites WHERE id = ?').get(id)
+    })
+
+    // 置顶切换
+    ipcMain.handle('favorite:pin', (_e, id: string, pinned: boolean) => {
+      this.db.prepare('UPDATE favorites SET is_pinned = ?, updated_at = ? WHERE id = ?').run(pinned ? 1 : 0, now(), id)
+      return true
+    })
+
+    // 删除
+    ipcMain.handle('favorite:delete', (_e, id: string) => {
+      this.db.prepare('DELETE FROM favorites WHERE id = ?').run(id)
       return true
     })
   }

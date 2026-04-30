@@ -45,6 +45,21 @@ export interface Reminder {
   title: string; body: string; remind_at: number; status: string; created_at: number
 }
 
+export type FavoriteType = 'link' | 'quote'
+
+export interface Favorite {
+  id: string
+  type: FavoriteType
+  title: string
+  url: string       // type=link 时使用
+  content: string   // type=quote 时使用
+  author: string
+  tags: string      // JSON 字符串
+  is_pinned: number
+  created_at: number
+  updated_at: number
+}
+
 export interface BackupInfo {
   name: string
   path: string
@@ -173,6 +188,16 @@ export interface DreamAPI {
     update: (id: string, data: Partial<Omit<Account, 'id' | 'created_at' | 'updated_at'>>) => Promise<Account>
     delete: (id: string) => Promise<boolean>
   }
+  favorite: {
+    list: (filter?: { type?: string; keyword?: string }) => Promise<Favorite[]>
+    add: (data: {
+      type: FavoriteType; title?: string; url?: string
+      content?: string; author?: string; tags?: string[]
+    }) => Promise<Favorite>
+    update: (id: string, data: Partial<Omit<Favorite, 'id' | 'created_at' | 'updated_at'>>) => Promise<Favorite>
+    pin: (id: string, pinned: boolean) => Promise<boolean>
+    delete: (id: string) => Promise<boolean>
+  }
 }
 
 // ==================== 注册 contextBridge ====================
@@ -279,5 +304,12 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     add: (data: Record<string, unknown>) => ipcRenderer.invoke('account:add', data),
     update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('account:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('account:delete', id)
+  },
+  favorite: {
+    list: (filter?: Record<string, unknown>) => ipcRenderer.invoke('favorite:list', filter),
+    add: (data: Record<string, unknown>) => ipcRenderer.invoke('favorite:add', data),
+    update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('favorite:update', id, data),
+    pin: (id: string, pinned: boolean) => ipcRenderer.invoke('favorite:pin', id, pinned),
+    delete: (id: string) => ipcRenderer.invoke('favorite:delete', id)
   }
 } satisfies DreamAPI)
