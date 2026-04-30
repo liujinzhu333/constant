@@ -1,6 +1,6 @@
 # Dream 项目开发上下文
 
-> 最后更新：2026-04-24
+> 最后更新：2026-04-30
 
 ---
 
@@ -54,7 +54,7 @@ dream/
 │   └── modules/
 │       ├── startup/index.ts      # 单例锁、窗口创建、业务包加载（耗时~1000ms）
 │       ├── logger/index.ts       # 按天轮转日志，保留30天
-│       ├── storage/index.ts      # SQLite3 + AES-256 加密，10张业务表
+│       ├── storage/index.ts      # SQLite3 + AES-256 加密，多张业务表
 │       ├── updater/index.ts      # electron-updater，MD5校验，支持回滚
 │       ├── system/index.ts       # 窗口/托盘/快捷键 Cmd+Shift+D/系统通知
 │       ├── ipc/index.ts          # IPC 通信中心
@@ -70,15 +70,19 @@ dream/
 │   │   ├── todo.ts               # 待办 Store
 │   │   ├── study.ts              # 计划 Store（PLAN_CATEGORIES 5种类型）
 │   │   ├── note.ts               # 笔记 Store（saveNote，不回写 content）
-│   │   └── schedule.ts           # 日程 Store（dayjs 月历）
+│   │   ├── schedule.ts           # 日程 Store（dayjs 月历）
+│   │   ├── account.ts            # 账号 Store（密钥内存持有，AES 加解密）
+│   │   └── favorite.ts           # 收藏 Store（链接/名言，置顶排序）
 │   └── views/
 │       ├── HomeView.vue          # 侧边导航（El 图标）+ KeepAlive
-│       ├── SettingsView.vue      # 设置页（ElDescriptions/ElCard/ElMessage）
+│       ├── SettingsView.vue      # 设置页（备份管理、日志查看器）
 │       ├── todo/TodoView.vue     # 待办（ElDialog/ElRadioGroup/ElBadge）
 │       ├── study/StudyView.vue   # 计划（ElProgress/ElMessageBox）
 │       ├── note/NoteView.vue     # 笔记（搜索防抖400ms，保存防抖800ms）
 │       ├── schedule/ScheduleView.vue  # 日程（月历 + ElDatePicker）
-│       └── reminder/ReminderView.vue  # 提醒（ElTabs/ElTooltip）
+│       ├── reminder/ReminderView.vue  # 提醒（ElTabs/ElTooltip）
+│       ├── account/AccountView.vue   # 账号管理（锁屏/分类导航/卡片Grid）
+│       └── favorite/FavoriteView.vue  # 收藏（链接/名言卡片，置顶/标签）
 ├── public/
 │   ├── favicon.svg
 │   └── logo.png                  # 应用 logo（同时作为 favicon 和侧边栏图标）
@@ -159,6 +163,24 @@ import { CheckboxMultipleMarked, NotebookOutline, CalendarMonth, BellOutline } f
 - WAL 模式，支持并发读
 - 加密密钥存于 `userData/.dream_key`（mode 0o600）
 - 数据库路径：`~/Library/Application Support/dream/dream.db`（macOS）
+- **restoreBackup 流程**：必须先 `close()`，再 `fs.copyFileSync`，再 `initDatabase()` 重新连接，不能直接覆盖被进程持有的文件。
+
+### 8. IPC 传参去响应式（重要）
+Electron IPC 使用结构化克隆算法，Vue 响应式对象（`Proxy`）无法被克隆，直接传递会抛出 "An object could not be cloned"。  
+**解决**：在 store action 调用 IPC 前，用 `JSON.parse(JSON.stringify(data))` 彻底解除响应式。数组用 `[...arr]` 展开也可作为补充保险。
+
+### 9. openExternal 只放行 https://
+`ipc/index.ts` 中 `app:openExternal` handler 只允许 `https://` 协议。打开本地目录必须用 `app:showInFolder`（调用 `shell.showItemInFolder`）。
+
+### 10. 白屏 Bug（electron-updater 自动检测）
+生产环境启动 5 秒后自动检测更新，GitHub 无 Release 时 `autoUpdater.on('error')` 触发，等同于主进程 `uncaughtException`，导致渲染进程白屏。  
+**三层修复**：
+1. `process.on('uncaughtException/unhandledRejection')` 全局兜底
+2. `userTriggered` 标志区分自动/手动触发（自动触发时静默失败）
+3. 自动检测调用加 `.catch(() => {})` 双重保险
+
+### 11. Element Plus 按钮间距陷阱
+`.el-button + .el-button` 有默认 `margin-left: 12px`，多按钮容器必须用 `:deep(.el-button + .el-button) { margin-left: 0 }` 覆盖，不与 `gap` 混用。
 
 ---
 
@@ -167,10 +189,12 @@ import { CheckboxMultipleMarked, NotebookOutline, CalendarMonth, BellOutline } f
 | 模块 | Store | View | 核心功能 |
 |---|---|---|---|
 | 待办 | `stores/todo.ts` | `todo/TodoView.vue` | 优先级(高/中/低)、截止日期、全部/待完成/已完成筛选 |
-| 计划 | `stores/study.ts` | `study/StudyView.vue` | 5种类型（学习/工作/生活/健身/财务）、进度环、任务列表 |
+| 计划 | `stores/study.ts` | `study/StudyView.vue` | 5种类型（学习/工作/生活/健身/财务）、进度环、任务列表、子计划 |
 | 笔记 | `stores/note.ts` | `note/NoteView.vue` | 搜索防抖400ms，编辑防抖800ms，失焦立即保存，置顶 |
 | 日程 | `stores/schedule.ts` | `schedule/ScheduleView.vue` | 月历视图，全天/时间段日程，颜色标记 |
 | 提醒 | 无独立 Store | `reminder/ReminderView.vue` | 待处理/已完成 Tab，推迟10分钟，系统通知 |
+| 账号管理 | `stores/account.ts` | `account/AccountView.vue` | 锁屏+密钥验证，8种平台类型，AES加密密码，卡片Grid |
+| 收藏 | `stores/favorite.ts` | `favorite/FavoriteView.vue` | 链接/名言两种类型，置顶，标签，分类导航，Grid卡片 |
 
 ### 计划类型常量（`stores/study.ts`）
 ```ts
@@ -190,16 +214,18 @@ export const PLAN_CATEGORIES = [
 
 ```ts
 window.dreamAPI = {
-  app:          { getPlatform, getPath, openExternal },
-  log:          { getLogDir },
-  store:        { getMeta, backup },
-  updater:      { getStatus, check, download, rollback, onStatus, onProgress },
+  app:          { getVersion, getPlatform, getPath, openExternal, showInFolder, showOpenDialog, showSaveDialog, minimize, quit },
+  store:        { set, get, delete, backup, getMeta, listBackups, deleteBackup, restoreBackup, importBackup },
+  log:          { debug, info, warn, error, getLogDir, getFiles, readFile, deleteFile, clearAll },
+  updater:      { check, download, install, getStatus, rollback, onStatus, onProgress, onError },
   notification: { send },
-  todo:         { list, add, update, remove },
-  plan:         { list, add, update, remove, listTasks, addTask, updateTask, deleteTask },
-  note:         { list, get, add, save, remove, togglePin, search },
-  schedule:     { listMonth, listDay, add, remove },
-  reminder:     { list, add, snooze, dismiss, delete },
+  todo:         { list, add, update, done, undone, delete },
+  study:        { planList, planAdd, planUpdate, planDelete, subPlanList, taskList, taskAdd, taskDone, taskUndone, taskDelete },
+  note:         { list, get, add, update, delete },
+  schedule:     { list, add, update, delete },
+  reminder:     { list, add, dismiss, snooze, delete },
+  account:      { list, add, update, delete },
+  favorite:     { list, add, update, pin, delete },
 }
 ```
 
@@ -210,9 +236,10 @@ window.dreamAPI = {
 ### 产物目录：`release/`
 | 文件 | 说明 |
 |---|---|
-| `Dream-1.0.0-arm64.dmg` | macOS 安装包 |
-| `Dream-1.0.0-arm64-mac.zip` | macOS zip（热更新分发） |
-| `Dream-1.0.0-arm64.dmg.blockmap` | 增量更新 blockmap |
+| `Dream-x.x.x-arm64.dmg` | macOS 安装包 |
+| `Dream-x.x.x-arm64-mac.zip` | macOS zip（热更新分发） |
+| `Dream-x.x.x-arm64.dmg.blockmap` | 增量更新 blockmap |
+| `latest-mac.yml` | 更新元数据（必须上传到 GitHub Release） |
 
 ### 图标文件
 | 文件 | 用途 |
@@ -233,7 +260,9 @@ xattr -cr /Applications/Dream.app
 
 ## Git 仓库
 
-- **远程**：`https://github.com/liujinzhu333/constant`
+- **远程（双推）**：
+  - GitHub：`https://github.com/liujinzhu333/constant`
+  - GitCode：`https://gitcode.com/smallBig/constant`
 - **分支**：`main`
 - **本地路径**：`/Users/liujinzhu/code/constant`
 - **数据目录**（运行时）：`~/Library/Application Support/dream/`
