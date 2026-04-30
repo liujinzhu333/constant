@@ -1,0 +1,35 @@
+dream/electron/preload/index.ts
+  e3df5d3608ab3df4 48-71,155-163,259-264
+dream/electron/modules/storage/index.ts
+  e3df5d3608ab3df4 200-214,227-232
+dream/AGENTS.md
+  e3df5d3608ab3df4 3-4,8,10,13-14,24-25,29-31,33-34,36,41,44-47,50,52,55-59,61,75-76,100,103-125,128-129,132-134,136-137,140,143,145,149-152,154,156,158,160,162-206,210,212-217,221,223,225-232,234-280,290-292,296-301
+dream/src/views/account/AccountView.vue
+  e3df5d3608ab3df4 1-607
+dream/src/views/HomeView.vue
+  e3df5d3608ab3df4 42,49,59-60,70-71
+dream/electron/modules/business/index.ts
+  e3df5d3608ab3df4 9,32,300-361
+dream/src/stores/account.ts
+  e3df5d3608ab3df4 1-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "089e7ed700453b0d8982a91bfe00b6aec670e34b",
+  "prompts": {
+    "e3df5d3608ab3df4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_227da2751ffeD1cuFoy4nN32UW",
+        "model": "unknown"
+      },
+      "human_author": "smallBig",
+      "messages": [],
+      "total_additions": 1306,
+      "total_deletions": 278,
+      "accepted_lines": 1097,
+      "overriden_lines": 0
+    }
+  }
+}
