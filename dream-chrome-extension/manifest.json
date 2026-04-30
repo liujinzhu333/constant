@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Dream 收藏",
+  "version": "1.0.0",
+  "description": "一键将当前页面收藏到 Dream 应用",
+  "permissions": ["activeTab", "scripting", "notifications"],
+  "host_permissions": ["http://localhost:45678/*"],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "收藏到 Dream"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

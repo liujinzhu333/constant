@@ -11,6 +11,7 @@ import { Logger } from '../logger'
 import { StorageManager } from '../storage'
 import { SystemAdapter } from '../system'
 import { UpdaterModule } from '../updater'
+import { LocalHttpServer } from '../http-server'
 
 // vite-plugin-electron 开发时注入 VITE_DEV_SERVER_URL，以此判断是否开发模式
 const isDev = !!process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development'
@@ -82,12 +83,15 @@ export class StartupManager {
     const updater = UpdaterModule.getInstance()
     updater.init(mainWindow)
 
-    // 11. 二次激活时聚焦窗口
+    // 11. 启动本地 HTTP 服务（供 Chrome 插件调用）
+    LocalHttpServer.getInstance().start()
+
+    // 12. 二次激活时聚焦窗口
     app.on('second-instance', () => {
       system.showMainWindow()
     })
 
-    // 12. macOS: dock 点击重新显示窗口
+    // 13. macOS: dock 点击重新显示窗口
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         system.createMainWindow({ preloadPath })
@@ -96,11 +100,12 @@ export class StartupManager {
       }
     })
 
-    // 13. 退出清理
+    // 14. 退出清理
     app.on('before-quit', () => {
       app.isQuitting = true
     })
     app.on('will-quit', () => {
+      LocalHttpServer.getInstance().stop()
       system.destroy()
       storage.close()
       logger.info('Startup', '基座已退出')
