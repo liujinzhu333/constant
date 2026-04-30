@@ -1,0 +1,33 @@
+dream/src/stores/favorite.ts
+  e3df5d3608ab3df4 1-64
+dream/src/views/favorite/FavoriteView.vue
+  e3df5d3608ab3df4 1-529
+dream/electron/modules/business/index.ts
+  e3df5d3608ab3df4 33,363-428
+dream/src/views/HomeView.vue
+  e3df5d3608ab3df4 42,50,61-62,73
+dream/electron/modules/storage/index.ts
+  e3df5d3608ab3df4 201-214
+dream/electron/preload/index.ts
+  e3df5d3608ab3df4 48-62,191-200,307-313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "694d702b88b3c51ad5d59fdf9de77a3a96056ab4",
+  "prompts": {
+    "e3df5d3608ab3df4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_227da2751ffeD1cuFoy4nN32UW",
+        "model": "unknown"
+      },
+      "human_author": "smallBig",
+      "messages": [],
+      "total_additions": 711,
+      "total_deletions": 2,
+      "accepted_lines": 711,
+      "overriden_lines": 0
+    }
+  }
+}
