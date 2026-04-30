@@ -1,0 +1,31 @@
+dream/electron/modules/ipc/index.ts
+  e3df5d3608ab3df4 12,33,231-257
+dream/electron/preload/index.ts
+  e3df5d3608ab3df4 201-205,319-323
+dream/electron/modules/http-server/index.ts
+  e3df5d3608ab3df4 16,27-34,36,136,141,147,155-156
+dream/src/views/favorite/FavoriteView.vue
+  e3df5d3608ab3df4 7-14,199,361-366,395-396
+dream/src/views/SettingsView.vue
+  e3df5d3608ab3df4 95-128,205-209,252-255,378-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e34396a09bf72384a7cf7e925d34df20f532f466",
+  "prompts": {
+    "e3df5d3608ab3df4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_227da2751ffeD1cuFoy4nN32UW",
+        "model": "unknown"
+      },
+      "human_author": "smallBig",
+      "messages": [],
+      "total_additions": 150,
+      "total_deletions": 2,
+      "accepted_lines": 150,
+      "overriden_lines": 0
+    }
+  }
+}
