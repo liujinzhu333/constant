@@ -1,6 +1,6 @@
 # Dream — AI Agent 协作指南
 
-> 最后更新：2026-04-30
+> 最后更新：2026-04-30（收藏刷新按钮 + Chrome 插件 HTTP 服务管理）
 
 ## 项目概述
 
@@ -222,11 +222,12 @@ const localContent = ref('')
 - **Store**：`stores/favorite.ts` | **View**：`views/favorite/FavoriteView.vue`
 - `type` 字段区分 `link`（网页链接）/ `quote`（名人名言）
 - 字段：`title / url / content / author / tags / is_pinned`
-- **布局**：左侧导航（全部/链接/名言 + 搜索）+ 右侧 Grid 卡片（auto-fill，minmax 260px 1fr）
+- **布局**：左侧导航（全部/链接/名言 + 搜索 + 刷新/新增按钮）+ 右侧 Grid 卡片（auto-fill，minmax 260px 1fr）
 - 链接卡片：标题、URL 可点击跳转/复制、来源、标签
 - 名言卡片：橙色左边框引用样式、内容、作者、出处
 - 支持置顶（⭐）、编辑、删除（二次确认）、标签管理
 - 新增弹窗：类型切换显示对应字段，链接失焦自动提取域名填充标题
+- **刷新按钮**：侧边栏 header 右侧，点击重新拉取列表（插件收藏后可手动刷新查看结果）
 - IPC：`favorite:list/add/update/pin/delete`
 - **IPC 注意**：store 的 `add` / `update` 方法内用 `JSON.parse(JSON.stringify(data))` 解除响应式，避免 "object could not be cloned" 错误
 
@@ -239,6 +240,7 @@ const localContent = ref('')
 | 关于 | 显示基座版本、运行平台 |
 | 更新 | 检查更新（GitHub Releases）、下载、立即安装、回滚版本 |
 | 数据 | 显示数据目录路径、备份数据、历史备份列表（时间/大小/恢复/删除）、导入备份、打开目录 |
+| Chrome 插件 | 本地 HTTP 服务手动启停（端口 45678）；开发环境随应用自动启动，生产环境需手动启动；用于切换插件收藏目标（开发库 vs 生产库） |
 | 日志 | 内嵌日志查看器：文件标签切换、级别着色、自动滚底、单文件删除、清空历史 |
 
 ---
@@ -302,7 +304,8 @@ window.dreamAPI = {
   schedule: { list, add, update, delete },
   reminder: { list, add, dismiss, snooze, delete },
   account:  { list, add, update, delete },
-  favorite: { list, add, update, pin, delete },
+  favorite:   { list, add, update, pin, delete },
+  httpServer: { start, stop, status },
 }
 ```
 
