@@ -328,16 +328,19 @@ async function handleSave() {
   if (f.type === 'link' && !f.url.trim()) { ElMessage.warning('请填写链接地址'); return }
   if (f.type === 'quote' && !f.content.trim()) { ElMessage.warning('请填写名言内容'); return }
 
+  // 解除 Vue 响应式 Proxy，避免 IPC 结构化克隆失败
+  const tags = [...f.tags]
+
   saving.value = true
   try {
     if (editingId.value) {
       await store.update(editingId.value, {
         title: f.title, url: f.url, content: f.content,
-        author: f.author, tags: f.tags as unknown as string  // store 传 string[]，IPC 序列化
+        author: f.author, tags: tags as unknown as string  // store 传 string[]，IPC 序列化
       } as Parameters<typeof store.update>[1])
       ElMessage.success('已更新')
     } else {
-      await store.add({ type: f.type, title: f.title, url: f.url, content: f.content, author: f.author, tags: f.tags })
+      await store.add({ type: f.type, title: f.title, url: f.url, content: f.content, author: f.author, tags })
       ElMessage.success('已收藏')
     }
     dialogVisible.value = false

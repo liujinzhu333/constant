@@ -22,7 +22,8 @@ export const useFavoriteStore = defineStore('favorite', () => {
     type: FavoriteType; title?: string; url?: string
     content?: string; author?: string; tags?: string[]
   }) {
-    const created = await window.dreamAPI.favorite.add(data)
+    // 用 JSON 序列化彻底解除 Vue 响应式 Proxy，避免 IPC 结构化克隆失败
+    const created = await window.dreamAPI.favorite.add(JSON.parse(JSON.stringify(data)))
     // 置顶的插到最前，否则按创建时间降序插入头部
     if (created.is_pinned) {
       items.value.unshift(created)
@@ -35,7 +36,8 @@ export const useFavoriteStore = defineStore('favorite', () => {
   }
 
   async function update(id: string, data: Partial<Omit<Favorite, 'id' | 'created_at' | 'updated_at'>>) {
-    const updated = await window.dreamAPI.favorite.update(id, data)
+    // 用 JSON 序列化彻底解除 Vue 响应式 Proxy，避免 IPC 结构化克隆失败
+    const updated = await window.dreamAPI.favorite.update(id, JSON.parse(JSON.stringify(data)))
     const idx = items.value.findIndex(i => i.id === id)
     if (idx !== -1) items.value[idx] = updated
     return updated
