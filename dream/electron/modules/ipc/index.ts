@@ -9,6 +9,7 @@ import { StorageManager } from '../storage'
 import { SystemAdapter } from '../system'
 import { UpdaterModule } from '../updater'
 import { BusinessIpc } from '../business'
+import { LocalHttpServer } from '../http-server'
 
 export class IpcManager {
   private static instance: IpcManager
@@ -29,6 +30,7 @@ export class IpcManager {
     this.registerStorageHandlers()
     this.registerNotificationHandlers()
     this.registerSystemHandlers()
+    this.registerHttpServerHandlers()
     // 注册业务模块 IPC
     BusinessIpc.getInstance().register()
     this.logger.info('IPC', 'IPC 通信处理器注册完成')
@@ -224,6 +226,33 @@ export class IpcManager {
 
     ipcMain.handle('updater:rollback', async () => {
       return UpdaterModule.getInstance().rollback()
+    })
+  }
+
+  // ==================== 本地 HTTP 服务管理 ====================
+  private registerHttpServerHandlers() {
+    const srv = LocalHttpServer.getInstance()
+
+    ipcMain.handle('httpServer:start', () => {
+      try {
+        srv.start()
+        return { success: true, port: srv.getPort() }
+      } catch (e) {
+        return { success: false, error: (e as Error).message }
+      }
+    })
+
+    ipcMain.handle('httpServer:stop', () => {
+      try {
+        srv.stop()
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: (e as Error).message }
+      }
+    })
+
+    ipcMain.handle('httpServer:status', () => {
+      return { running: srv.isRunning(), port: srv.getPort() }
     })
   }
 }

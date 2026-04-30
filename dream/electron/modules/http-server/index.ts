@@ -13,6 +13,7 @@ const PORT = 45678
 export class LocalHttpServer {
   private static instance: LocalHttpServer
   private server: http.Server | null = null
+  private running = false
 
   private constructor() {}
 
@@ -23,7 +24,16 @@ export class LocalHttpServer {
     return LocalHttpServer.instance
   }
 
+  isRunning(): boolean {
+    return this.running
+  }
+
+  getPort(): number {
+    return PORT
+  }
+
   start() {
+    if (this.running) return
     const logger = Logger.getInstance()
 
     this.server = http.createServer((req, res) => {
@@ -123,15 +133,18 @@ export class LocalHttpServer {
     })
 
     this.server.listen(PORT, '127.0.0.1', () => {
+      this.running = true
       logger.info('HttpServer', `本地 HTTP 服务已启动: http://127.0.0.1:${PORT}`)
     })
 
     this.server.on('error', (err: NodeJS.ErrnoException) => {
+      this.running = false
       if (err.code === 'EADDRINUSE') {
         logger.warn('HttpServer', `端口 ${PORT} 已被占用，本地 HTTP 服务启动失败`)
       } else {
         logger.error('HttpServer', '本地 HTTP 服务错误', err)
       }
+      this.server = null
     })
   }
 
@@ -139,6 +152,8 @@ export class LocalHttpServer {
     if (this.server) {
       this.server.close()
       this.server = null
+      this.running = false
+      Logger.getInstance().info('HttpServer', '本地 HTTP 服务已停止')
     }
   }
 }

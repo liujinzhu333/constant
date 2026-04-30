@@ -198,6 +198,11 @@ export interface DreamAPI {
     pin: (id: string, pinned: boolean) => Promise<boolean>
     delete: (id: string) => Promise<boolean>
   }
+  httpServer: {
+    start: () => Promise<{ success: boolean; port?: number; error?: string }>
+    stop: () => Promise<{ success: boolean; error?: string }>
+    status: () => Promise<{ running: boolean; port: number }>
+  }
 }
 
 // ==================== 注册 contextBridge ====================
@@ -311,5 +316,10 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('favorite:update', id, data),
     pin: (id: string, pinned: boolean) => ipcRenderer.invoke('favorite:pin', id, pinned),
     delete: (id: string) => ipcRenderer.invoke('favorite:delete', id)
+  },
+  httpServer: {
+    start: () => ipcRenderer.invoke('httpServer:start'),
+    stop: () => ipcRenderer.invoke('httpServer:stop'),
+    status: () => ipcRenderer.invoke('httpServer:status')
   }
 } satisfies DreamAPI)

@@ -4,7 +4,14 @@
     <div class="fav-sidebar">
       <div class="fav-sidebar-header">
         <span class="fav-sidebar-title">收藏</span>
-        <el-button type="primary" :icon="Plus" size="small" circle @click="openAdd()" />
+        <div class="fav-sidebar-actions">
+          <el-tooltip content="刷新" placement="top" :show-after="400">
+            <el-button :icon="Refresh" size="small" circle :loading="store.loading" @click="refresh()" />
+          </el-tooltip>
+          <el-tooltip content="新增" placement="top" :show-after="400">
+            <el-button type="primary" :icon="Plus" size="small" circle @click="openAdd()" />
+          </el-tooltip>
+        </div>
       </div>
 
       <div class="fav-search">
@@ -189,7 +196,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Plus, Search, Edit, Delete, Star, StarFilled,
-  CopyDocument, Link as LinkIcon
+  CopyDocument, Link as LinkIcon, Refresh
 } from '@element-plus/icons-vue'
 import { useFavoriteStore } from '../../stores/favorite'
 import type { Favorite, FavoriteType } from '../../stores/favorite'
@@ -351,6 +358,12 @@ async function handleSave() {
   }
 }
 
+// ==================== 刷新 ====================
+async function refresh() {
+  await store.load({ keyword: keyword.value || undefined })
+  ElMessage.success('已刷新')
+}
+
 // ==================== 初始化 ====================
 onMounted(() => store.load())
 </script>
@@ -379,6 +392,8 @@ onMounted(() => store.load())
   padding: 0 6px 4px;
 }
 .fav-sidebar-title { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.fav-sidebar-actions { display: flex; gap: 4px; }
+:deep(.fav-sidebar-actions .el-button + .el-button) { margin-left: 0; }
 .fav-search { padding: 0 2px; }
 
 .fav-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }

@@ -92,6 +92,40 @@
         </el-card>
       </section>
 
+      <!-- Chrome 插件 / 本地 HTTP 服务 -->
+      <section class="settings-section">
+        <h2 class="section-title">Chrome 插件</h2>
+        <el-card shadow="never">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="服务状态">
+              <el-tag :type="httpRunning ? 'success' : 'info'">
+                {{ httpRunning ? `运行中（端口 ${httpPort}）` : '已停止' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="说明">
+              <el-text size="small" type="info">
+                开启后 Chrome 插件可将网页收藏到当前运行的 Dream 实例（开发或生产环境）
+              </el-text>
+            </el-descriptions-item>
+          </el-descriptions>
+          <div class="data-actions">
+            <el-button
+              v-if="!httpRunning"
+              type="primary"
+              :loading="httpToggling"
+              @click="startHttpServer"
+            >启动服务</el-button>
+            <el-button
+              v-else
+              type="danger"
+              plain
+              :loading="httpToggling"
+              @click="stopHttpServer"
+            >停止服务</el-button>
+          </div>
+        </el-card>
+      </section>
+
       <!-- 日志 -->
       <section class="settings-section">
         <h2 class="section-title">日志</h2>
@@ -168,6 +202,11 @@ const importing = ref(false)
 const backupLoading = ref(false)
 const backups = ref<BackupInfo[]>([])
 
+// HTTP 服务
+const httpRunning = ref(false)
+const httpPort = ref(45678)
+const httpToggling = ref(false)
+
 // 日志查看器
 type LogFileInfo = { name: string; date: string; size: number; isToday: boolean }
 const logFiles = ref<LogFileInfo[]>([])
@@ -210,6 +249,10 @@ onMounted(async () => {
   await refreshLogFiles(true)
   // 加载备份列表
   await loadBackups()
+  // 查询 HTTP 服务状态
+  const httpStatus = await api.httpServer.status()
+  httpRunning.value = httpStatus.running
+  httpPort.value = httpStatus.port
   removeStatusListener = api.updater.onStatus(async (data) => {
     updateStatus.value = data.status
     // 下载完成后弹出安装确认
@@ -330,6 +373,42 @@ async function openDataDir() {
 
 async function showInFolder(filePath: string) {
   await window.dreamAPI?.app.showInFolder(filePath)
+}
+
+// ==================== HTTP 服务管理 ====================
+async function startHttpServer() {
+  const api = window.dreamAPI
+  if (!api) return
+  httpToggling.value = true
+  try {
+    const result = await api.httpServer.start()
+    if (result.success) {
+      httpRunning.value = true
+      httpPort.value = result.port ?? 45678
+      ElMessage.success(`HTTP 服务已启动（端口 ${httpPort.value}）`)
+    } else {
+      ElMessage.error(result.error ?? '启动失败')
+    }
+  } finally {
+    httpToggling.value = false
+  }
+}
+
+async function stopHttpServer() {
+  const api = window.dreamAPI
+  if (!api) return
+  httpToggling.value = true
+  try {
+    const result = await api.httpServer.stop()
+    if (result.success) {
+      httpRunning.value = false
+      ElMessage.success('HTTP 服务已停止')
+    } else {
+      ElMessage.error(result.error ?? '停止失败')
+    }
+  } finally {
+    httpToggling.value = false
+  }
 }
 
 async function loadBackups() {
