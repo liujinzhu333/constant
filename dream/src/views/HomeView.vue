@@ -39,13 +39,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Checked, Notebook, Calendar, Bell, List, Setting } from '@element-plus/icons-vue'
+import { Checked, Notebook, Calendar, Bell, List, Setting, Key } from '@element-plus/icons-vue'
 import { useTodoStore } from '../stores/todo'
 import TodoView from './todo/TodoView.vue'
 import StudyView from './study/StudyView.vue'
 import NoteView from './note/NoteView.vue'
 import ScheduleView from './schedule/ScheduleView.vue'
 import ReminderView from './reminder/ReminderView.vue'
+import AccountView from './account/AccountView.vue'
 
 const todoStore = useTodoStore()
 const activeNav = ref('todo')
@@ -55,7 +56,8 @@ const viewMap: Record<string, unknown> = {
   study: StudyView,
   note: NoteView,
   schedule: ScheduleView,
-  reminder: ReminderView
+  reminder: ReminderView,
+  account: AccountView
 }
 
 const currentView = computed(() => viewMap[activeNav.value])
@@ -65,7 +67,8 @@ const navItems = computed(() => [
   { key: 'study', icon: List, label: '计划', badge: 0 },
   { key: 'note', icon: Notebook, label: '笔记', badge: 0 },
   { key: 'schedule', icon: Calendar, label: '日程', badge: 0 },
-  { key: 'reminder', icon: Bell, label: '提醒', badge: 0 }
+  { key: 'reminder', icon: Bell, label: '提醒', badge: 0 },
+  { key: 'account', icon: Key, label: '账号', badge: 0 }
 ])
 
 onMounted(async () => {

@@ -6,6 +6,7 @@ import { ipcMain } from 'electron'
 import { StorageManager } from '../storage'
 import { Logger } from '../logger'
 import { randomUUID } from 'crypto'
+import CryptoJS from 'crypto-js'
 
 function now() { return Math.floor(Date.now() / 1000) }
 function uuid() { return randomUUID() }
@@ -28,6 +29,7 @@ export class BusinessIpc {
     this.registerNote()
     this.registerSchedule()
     this.registerReminder()
+    this.registerAccount()
     this.logger.info('Business', '业务 IPC 处理器注册完成')
   }
 
@@ -292,6 +294,68 @@ export class BusinessIpc {
 
     ipcMain.handle('reminder:delete', (_e, id: string) => {
       this.db.prepare('DELETE FROM reminders WHERE id = ?').run(id)
+      return true
+    })
+  }
+
+  // ===================== 账号管理 =====================
+  private registerAccount() {
+    // 列表（不返回密码密文，前端按需解密）
+    ipcMain.handle('account:list', () => {
+      return this.db.prepare('SELECT * FROM accounts ORDER BY created_at DESC').all()
+    })
+
+    // 新增账号（密码由前端用用户密钥加密后传入密文）
+    ipcMain.handle('account:add', (_e, data: {
+      platform: string
+      platform_url?: string
+      account_name?: string
+      phone?: string
+      email?: string
+      password_enc?: string  // 已由前端加密的密文
+      note?: string
+      category?: string
+    }) => {
+      const id = uuid()
+      this.db.prepare(`
+        INSERT INTO accounts (id, platform, platform_url, account_name, phone, email, password_enc, note, category, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        data.platform,
+        data.platform_url ?? '',
+        data.account_name ?? '',
+        data.phone ?? '',
+        data.email ?? '',
+        data.password_enc ?? '',
+        data.note ?? '',
+        data.category ?? 'other',
+        now(), now()
+      )
+      return this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id)
+    })
+
+    // 更新账号
+    ipcMain.handle('account:update', (_e, id: string, data: Partial<{
+      platform: string
+      platform_url: string
+      account_name: string
+      phone: string
+      email: string
+      password_enc: string
+      note: string
+      category: string
+    }>) => {
+      const fields = Object.keys(data).map(k => `${k} = ?`).join(', ')
+      const vals = Object.values(data)
+      if (!fields) return null
+      this.db.prepare(`UPDATE accounts SET ${fields}, updated_at = ? WHERE id = ?`).run(...vals, now(), id)
+      return this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id)
+    })
+
+    // 删除账号
+    ipcMain.handle('account:delete', (_e, id: string) => {
+      this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id)
       return true
     })
   }

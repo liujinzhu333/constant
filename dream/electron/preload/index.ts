@@ -45,6 +45,30 @@ export interface Reminder {
   title: string; body: string; remind_at: number; status: string; created_at: number
 }
 
+export type AccountCategory =
+  | 'dev'       // 开发工具（GitHub、GitLab、云服务…）
+  | 'social'    // 社交媒体（微博、Twitter、小红书…）
+  | 'shopping'  // 购物（淘宝、京东…）
+  | 'finance'   // 金融（支付宝、银行…）
+  | 'game'      // 游戏
+  | 'work'      // 工作（企业邮箱、OA…）
+  | 'media'     // 音视频（Netflix、B站…）
+  | 'other'     // 其他
+
+export interface Account {
+  id: string
+  platform: string
+  platform_url: string
+  account_name: string
+  phone: string
+  email: string
+  password_enc: string   // AES 密文，用户密钥在渲染进程持有
+  note: string
+  category: AccountCategory
+  created_at: number
+  updated_at: number
+}
+
 export interface DreamAPI {
   app: {
     getVersion: () => Promise<string>
@@ -126,6 +150,15 @@ export interface DreamAPI {
     add: (data: { source_type: string; source_id?: string; title: string; body?: string; remind_at: number }) => Promise<Reminder>
     dismiss: (id: string) => Promise<boolean>
     snooze: (id: string, newRemindAt: number) => Promise<boolean>
+    delete: (id: string) => Promise<boolean>
+  }
+  account: {
+    list: () => Promise<Account[]>
+    add: (data: {
+      platform: string; platform_url?: string; account_name?: string
+      phone?: string; email?: string; password_enc?: string; note?: string; category?: string
+    }) => Promise<Account>
+    update: (id: string, data: Partial<Omit<Account, 'id' | 'created_at' | 'updated_at'>>) => Promise<Account>
     delete: (id: string) => Promise<boolean>
   }
 }
@@ -223,5 +256,11 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     dismiss: (id: string) => ipcRenderer.invoke('reminder:dismiss', id),
     snooze: (id: string, newRemindAt: number) => ipcRenderer.invoke('reminder:snooze', id, newRemindAt),
     delete: (id: string) => ipcRenderer.invoke('reminder:delete', id)
+  },
+  account: {
+    list: () => ipcRenderer.invoke('account:list'),
+    add: (data: Record<string, unknown>) => ipcRenderer.invoke('account:add', data),
+    update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('account:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('account:delete', id)
   }
 } satisfies DreamAPI)

@@ -197,6 +197,21 @@ export class StorageManager {
           status      TEXT NOT NULL DEFAULT 'pending', -- pending | sent | snoozed | dismissed
           created_at  INTEGER DEFAULT (strftime('%s', 'now'))
         );
+
+        -- ===================== 业务包：账号管理 =====================
+        CREATE TABLE IF NOT EXISTS accounts (
+          id           TEXT PRIMARY KEY,
+          platform     TEXT NOT NULL DEFAULT '',   -- 平台名称（如 GitHub）
+          platform_url TEXT NOT NULL DEFAULT '',   -- 平台链接
+          account_name TEXT NOT NULL DEFAULT '',   -- 账号名称
+          phone        TEXT NOT NULL DEFAULT '',   -- 手机号（明文）
+          email        TEXT NOT NULL DEFAULT '',   -- 邮箱（明文）
+          password_enc TEXT NOT NULL DEFAULT '',   -- 密码密文（AES-256，密钥由用户持有）
+          note         TEXT NOT NULL DEFAULT '',   -- 备注
+          category     TEXT NOT NULL DEFAULT 'other', -- 平台分类
+          created_at   INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at   INTEGER DEFAULT (strftime('%s', 'now'))
+        );
       `)
 
       // 数据迁移：兼容旧数据库
@@ -207,6 +222,12 @@ export class StorageManager {
       // 子计划支持：parent_id 为空表示顶层计划
       if (!cols.includes('parent_id')) {
         this.db!.exec("ALTER TABLE study_plans ADD COLUMN parent_id TEXT REFERENCES study_plans(id) ON DELETE CASCADE")
+      }
+
+      // 数据迁移：accounts 表新增 category 字段
+      const accountCols = (this.db!.prepare("PRAGMA table_info(accounts)").all() as Array<{ name: string }>).map(c => c.name)
+      if (!accountCols.includes('category')) {
+        this.db!.exec("ALTER TABLE accounts ADD COLUMN category TEXT NOT NULL DEFAULT 'other'")
       }
 
       // 记录基座版本
