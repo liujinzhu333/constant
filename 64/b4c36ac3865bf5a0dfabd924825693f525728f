@@ -1,0 +1,184 @@
+dream-mobile/src/pages/reminder/index.vue
+  480aeee531d5af16 1-154
+dream-mobile-base/app/src/main/java/com/dream/mobile/file/FileBridge.kt
+  480aeee531d5af16 1-115
+dream-mobile/src/utils/update.ts
+  480aeee531d5af16 1-182
+dream-mobile-base/app/src/main/java/com/dream/mobile/update/UpdateBridge.kt
+  480aeee531d5af16 1-201
+dream-mobile-base/app/src/main/java/com/dream/mobile/bridge/BaseBridge.kt
+  480aeee531d5af16 1-23
+dream-mobile/src/pages/todo/index.vue
+  s_480aeee531d5af::t_975fc35c425d8c 29,52
+  480aeee531d5af16 1-7,15-28,30-51,53-242,255-391
+  s_480aeee531d5af::t_7315ee4b5a4a20 243-254
+  s_480aeee531d5af::t_f8567fa21cb62f 8-14
+dream-mobile-base/app/src/main/res/layout/activity_main.xml
+  480aeee531d5af16 1-15
+dream-mobile/src/stores/schedule.ts
+  480aeee531d5af16 1-91
+dream-mobile-base/build.gradle.kts
+  480aeee531d5af16 1-5
+dream-mobile/src/stores/account.ts
+  480aeee531d5af16 1-45,48-168
+  s_480aeee531d5af::t_c2b2797ce1ddb3 46-47
+dream-mobile-base/app/proguard-rules.pro
+  480aeee531d5af16 1-16
+dream-mobile/src/utils/crypto.ts
+  480aeee531d5af16 1-79
+dream-mobile/src/utils/notification.ts
+  480aeee531d5af16 1-65
+dream-mobile/components.d.ts
+  480aeee531d5af16 1-41
+dream-mobile/src/stores/favorite.ts
+  480aeee531d5af16 1-107
+dream-mobile-base/README.md
+  480aeee531d5af16 1-109
+dream-mobile/src/pages/study/index.vue
+  s_480aeee531d5af::t_0e595584d13f9f 38-41
+  s_480aeee531d5af::t_b76d87f4d825e0 240
+  480aeee531d5af16 1-37,42-239,241-261
+dream-mobile-base/app/src/main/java/com/dream/mobile/notification/AlarmReceiver.kt
+  480aeee531d5af16 1-37
+dream-mobile/src/styles/variables.scss
+  480aeee531d5af16 1-91
+dream-mobile/src/utils/logger.ts
+  480aeee531d5af16 1-197
+dream-mobile/src/utils/bridge.ts
+  480aeee531d5af16 1-436
+dream-mobile-base/app/src/main/res/values/strings.xml
+  480aeee531d5af16 1-9
+dream-mobile/src/uni.scss
+  480aeee531d5af16 1-128
+dream-mobile-base/.gitignore
+  s_480aeee531d5af::t_190f246d7cd0d3 12-17
+  480aeee531d5af16 1-11
+dream-mobile/package.json
+  480aeee531d5af16 1-32
+dream-mobile/src/pages/study/detail.vue
+  480aeee531d5af16 1-185
+dream-mobile/src/pages/schedule/index.vue
+  480aeee531d5af16 1-58,60-231
+  s_480aeee531d5af::t_daec42c3e5757d 59
+dream-mobile/vite.config.mts
+  480aeee531d5af16 1-59
+dream-mobile/src/env.d.ts
+  480aeee531d5af16 7-33
+dream-mobile/src/composables/useDebounce.ts
+  480aeee531d5af16 1-42
+dream-mobile-base/app/src/main/java/com/dream/mobile/db/SQLiteBridge.kt
+  s_480aeee531d5af::t_9920dfeabbc950 68
+  s_480aeee531d5af::t_833f2b6e639694 133-136,138-162
+  s_480aeee531d5af::t_d79203ddaa229b 117
+  480aeee531d5af16 1-67,69-116,118-132,137,163-279
+dream-mobile-base/gradle/wrapper/gradle-wrapper.properties
+  480aeee531d5af16 1-7
+dream-mobile/tsconfig.json
+  480aeee531d5af16 3-30
+dream-mobile/src/stores/study.ts
+  480aeee531d5af16 1-185
+dream-mobile-base/app/src/main/res/values/themes.xml
+  480aeee531d5af16 1-16
+dream-mobile/src/components/BottomSheet.vue
+  480aeee531d5af16 1-18
+dream-mobile/src/App.vue
+  s_480aeee531d5af::t_b2d293dbc870ef 136-137,139-140
+  480aeee531d5af16 1-135,138,141-147
+dream-mobile-base/gradlew
+  480aeee531d5af16 1-7
+dream-mobile/src/main.ts
+  480aeee531d5af16 1-101
+dream-mobile/src/pages/account/index.vue
+  480aeee531d5af16 1-56,61-132,134-154,156-161,163-234,236-245
+  s_480aeee531d5af::t_9ee84e13534f62 57-60
+  s_480aeee531d5af::t_6eabe90b4069ee 133
+  s_480aeee531d5af::t_82372152a5e66a 155
+  s_480aeee531d5af::t_d877fb7b10acfa 162
+  s_480aeee531d5af::t_51ae773bad21fa 235
+dream-mobile/src/utils/db.ts
+  480aeee531d5af16 1-478
+dream-mobile/src/pages/note/index.vue
+  s_480aeee531d5af::t_8573c3a935bc80 28-33
+  s_480aeee531d5af::t_ee427b3d69d196 137-138
+  480aeee531d5af16 1-27,34-136,139-140
+dream-mobile-base/app/src/main/java/com/dream/mobile/update/UpdateService.kt
+  480aeee531d5af16 1-28
+dream-mobile-base/settings.gradle.kts
+  480aeee531d5af16 1-17
+dream-mobile/src/pages/note/edit.vue
+  480aeee531d5af16 1-188
+dream-mobile/src/pages/settings/index.vue
+  480aeee531d5af16 1-149
+dream-mobile-base/app/build.gradle.kts
+  480aeee531d5af16 1-61
+dream-mobile-base/gradle/libs.versions.toml
+  480aeee531d5af16 1-23
+dream-mobile/index.html
+  480aeee531d5af16 2-16
+dream-mobile/src/pages/account/unlock.vue
+  480aeee531d5af16 1-51
+dream-mobile-base/app/src/main/java/com/dream/mobile/bridge/BridgeDispatcher.kt
+  480aeee531d5af16 1-116
+dream-mobile-base/app/src/main/res/xml/network_security_config.xml
+  480aeee531d5af16 1-18
+dream-mobile-base/app/src/main/java/com/dream/mobile/DreamApplication.kt
+  480aeee531d5af16 1-33
+dream-mobile/src/stores/todo.ts
+  480aeee531d5af16 1-114
+dream-mobile-base/app/src/main/java/com/dream/mobile/notification/BootReceiver.kt
+  480aeee531d5af16 1-87
+dream-mobile-base/gradle.properties
+  480aeee531d5af16 1-26
+dream-mobile/src/pages.json
+  480aeee531d5af16 1-175
+dream-mobile-base/app/src/main/AndroidManifest.xml
+  480aeee531d5af16 1-78
+dream-mobile/src/styles/global.scss
+  480aeee531d5af16 1-126
+dream-mobile/src/stores/note.ts
+  480aeee531d5af16 1-91
+dream-mobile-base/app/src/main/java/com/dream/mobile/MainActivity.kt
+  480aeee531d5af16 1-159
+dream-mobile/src/manifest.json
+  480aeee531d5af16 2-83
+dream-mobile-base/app/src/main/java/com/dream/mobile/notification/NotificationBridge.kt
+  480aeee531d5af16 1-144
+dream-mobile-base/app/src/main/java/com/dream/mobile/biometric/BiometricBridge.kt
+  480aeee531d5af16 1-88
+dream-mobile/src/pages/favorite/index.vue
+  s_480aeee531d5af::t_aa5cbf9ecb1a08 31-34
+  480aeee531d5af16 1-4,6-30,35-48,53-119,121-126,133-210,212-227
+  s_480aeee531d5af::t_43962624fac770 120,127-132
+  s_480aeee531d5af::t_0d5347763333d2 211
+  s_480aeee531d5af::t_832b5889b33ca8 5
+  s_480aeee531d5af::t_de8e02cddc22ff 49-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "64b4c36ac3865bf5a0dfabd924825693f525728f",
+  "prompts": {
+    "480aeee531d5af16": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_2040dc888ffeSVCmfxzEnzwjUl",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>",
+      "total_additions": 12498,
+      "total_deletions": 4326,
+      "accepted_lines": 7546,
+      "overriden_lines": 0
+    }
+  },
+  "sessions": {
+    "s_480aeee531d5af": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_2040dc888ffeSVCmfxzEnzwjUl",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
