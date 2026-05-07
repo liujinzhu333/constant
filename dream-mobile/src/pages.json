@@ -1,0 +1,176 @@
+{
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^uni-(.*)": "@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue"
+    }
+  },
+  "pages": [
+    {
+      "path": "pages/todo/index",
+      "style": {
+        "navigationBarTitleText": "待办",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/study/index",
+      "style": {
+        "navigationBarTitleText": "计划",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/note/index",
+      "style": {
+        "navigationBarTitleText": "笔记",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/schedule/index",
+      "style": {
+        "navigationBarTitleText": "日程",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/reminder/index",
+      "style": {
+        "navigationBarTitleText": "提醒",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/account/index",
+      "style": {
+        "navigationBarTitleText": "账号",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/favorite/index",
+      "style": {
+        "navigationBarTitleText": "收藏",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/study/detail",
+      "style": {
+        "navigationBarTitleText": "计划详情",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    },
+    {
+      "path": "pages/note/edit",
+      "style": {
+        "navigationBarTitleText": "编辑笔记",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
+      "path": "pages/account/unlock",
+      "style": {
+        "navigationBarTitleText": "解锁账号",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f2f2f7"
+      }
+    }
+  ],
+  "tabBar": {
+    "color": "#8e8e93",
+    "selectedColor": "#0071e3",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/todo/index",
+        "text": "待办",
+        "iconPath": "static/tabbar/todo.png",
+        "selectedIconPath": "static/tabbar/todo-active.png"
+      },
+      {
+        "pagePath": "pages/study/index",
+        "text": "计划",
+        "iconPath": "static/tabbar/study.png",
+        "selectedIconPath": "static/tabbar/study-active.png"
+      },
+      {
+        "pagePath": "pages/note/index",
+        "text": "笔记",
+        "iconPath": "static/tabbar/note.png",
+        "selectedIconPath": "static/tabbar/note-active.png"
+      },
+      {
+        "pagePath": "pages/schedule/index",
+        "text": "日程",
+        "iconPath": "static/tabbar/schedule.png",
+        "selectedIconPath": "static/tabbar/schedule-active.png"
+      },
+      {
+        "pagePath": "pages/settings/index",
+        "text": "更多",
+        "iconPath": "static/tabbar/more.png",
+        "selectedIconPath": "static/tabbar/more-active.png"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Dream",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f2f2f7",
+    "app-plus": {
+      "softinputNavBar": "none",
+      "pullToRefresh": {
+        "support": false
+      }
+    }
+  },
+  "condition": {
+    "current": 0,
+    "list": [
+      {
+        "name": "待办页",
+        "path": "pages/todo/index"
+      },
+      {
+        "name": "计划页",
+        "path": "pages/study/index"
+      },
+      {
+        "name": "笔记页",
+        "path": "pages/note/index"
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 全屏无 ActionBar 主题，让 WebView 占满整个屏幕 -->
+    <style name="Theme.DreamMobile" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- 闪屏主题（防止启动白屏闪烁） -->
+    <style name="Theme.DreamMobile.Splash" parent="Theme.DreamMobile">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

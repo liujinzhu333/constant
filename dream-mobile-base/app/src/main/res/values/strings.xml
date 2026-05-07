@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dream</string>
+    <string name="notification_channel_name">Dream 提醒</string>
+    <string name="notification_channel_desc">待办、日程及提醒通知</string>
+    <string name="biometric_prompt_title">验证身份</string>
+    <string name="biometric_prompt_subtitle">使用指纹或面容 ID 解锁账号管理</string>
+    <string name="biometric_prompt_cancel">取消</string>
+</resources>

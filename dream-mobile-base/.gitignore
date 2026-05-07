@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/build/
+
+# H5 构建产物（由 dream-mobile/dist 同步而来，不提交）
+app/src/main/assets/www/
+
+# Gradle wrapper jar（体积大，通过 gradlew 脚本拉取）
+gradle/wrapper/gradle-wrapper.jar
