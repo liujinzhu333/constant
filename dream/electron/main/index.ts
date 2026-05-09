@@ -15,8 +15,22 @@ if (isDev) {
 }
 
 // 规避 macOS GPU 进程崩溃问题（Electron 29 已知问题）
-app.commandLine.appendSwitch('--disable-gpu')
-app.commandLine.appendSwitch('--disable-software-rasterizer')
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+app.commandLine.appendSwitch('no-sandbox')
+
+// GPU / 网络服务崩溃时不退出 app，仅记录日志
+app.on('gpu-process-crashed' as any, (_event: any, killed: boolean) => {
+  console.error(`[Main] GPU 进程崩溃（killed=${killed}），应用继续运行`)
+})
+app.on('child-process-gone' as any, (_event: any, details: any) => {
+  console.error('[Main] 子进程退出:', details?.type, details?.reason)
+  // network_service / GPU 崩溃时阻止退出
+})
+// 阻止所有窗口关闭时自动退出（HTTP Server 需要保持运行）
+app.on('window-all-closed', (e: any) => {
+  e?.preventDefault?.()
+})
 
 // 主进程全局异常兜底，防止 uncaughtException / unhandledRejection 导致渲染进程白屏
 process.on('uncaughtException', (err) => {

@@ -83,8 +83,14 @@ export class StartupManager {
     const updater = UpdaterModule.getInstance()
     updater.init(mainWindow)
 
-    // 11. 启动本地 HTTP 服务（供 Chrome 插件调用）
-    LocalHttpServer.getInstance().start()
+    // 11. 启动本地 HTTP 服务（局域网 Web App + Chrome 插件调用）
+    const httpServer = LocalHttpServer.getInstance()
+    // 注入 dream-web 构建产物目录（生产模式下）
+    if (!isDev) {
+      const webRoot = path.join(__dirname, '../../dist-web')
+      httpServer.setWebRoot(webRoot)
+    }
+    httpServer.start()
 
     // 12. 二次激活时聚焦窗口
     app.on('second-instance', () => {
@@ -126,30 +132,46 @@ export class StartupManager {
 
   /**
    * 加载渲染进程页面
+   * 开发模式：加载 Vite Dev Server（dream/src 旧渲染进程，供调试基座用）
+   * 生产模式：加载 HTTP Server 托管的 dream-web Web App（localhost:45678）
    */
   private async loadApp(win: BrowserWindow, logger: Logger) {
     if (isDev) {
-      // 开发模式：加载 Vite Dev Server
-      const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+      // 开发模式：加载 dream-web Dev Server（5174）
+      const devUrl = 'http://localhost:5174'
       await win.loadURL(devUrl)
       win.webContents.openDevTools()
       logger.info('Startup', `开发模式加载: ${devUrl}`)
     } else {
-      // 生产模式：先尝试加载业务包，否则加载基座内置页
-      const storage = StorageManager.getInstance()
-      const activePackage = storage.getActivePackage()
-
-      if (activePackage && fs.existsSync(path.join(activePackage.path, 'index.html'))) {
-        const pkgIndexPath = path.join(activePackage.path, 'index.html')
-        await win.loadFile(pkgIndexPath)
-        logger.info('Startup', `已加载业务包: v${activePackage.version}`)
-      } else {
-        // 回退到基座内置静态页
-        const fallbackPath = path.join(__dirname, '../../dist/index.html')
-        await win.loadFile(fallbackPath)
-        logger.info('Startup', '加载基座内置页面（尚无业务包）')
-      }
+      // 生产模式：加载本地 HTTP Server 提供的 dream-web Web App
+      // HTTP Server 在上一步已启动（bootstrap step 11）
+      const webAppUrl = `http://localhost:45678/`
+      // 稍等 HTTP Server 就绪（最多 2 秒）
+      await this.waitForHttpServer(webAppUrl, 2000, logger)
+      await win.loadURL(webAppUrl)
+      logger.info('Startup', `生产模式加载 Web App: ${webAppUrl}`)
     }
+  }
+
+  /** 等待 HTTP Server 就绪（轮询 /ping 接口） */
+  private async waitForHttpServer(baseUrl: string, timeoutMs: number, logger: Logger) {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const { net } = await import('electron')
+        const req = net.request(`${baseUrl}ping`)
+        await new Promise<void>((resolve) => {
+          req.on('response', () => resolve())
+          req.on('error', () => resolve())
+          req.end()
+        })
+        return
+      } catch {
+        // 继续等待
+      }
+      await new Promise(r => setTimeout(r, 100))
+    }
+    logger.warn('Startup', 'HTTP Server 未在超时内就绪，继续加载页面')
   }
 
   /**

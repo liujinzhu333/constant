@@ -173,7 +173,148 @@ class DreamDBHelper(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 后续版本迁移在此追加 ALTER TABLE 语句
+        if (oldVersion < 2) {
+            // ---- todos ----
+            // priority: TEXT('medium') → INTEGER(2)，status: 'pending'→'todo'
+            db.execSQL("ALTER TABLE todos ADD COLUMN done_at INTEGER")
+            db.execSQL("UPDATE todos SET status = 'todo' WHERE status = 'pending'")
+            db.execSQL("UPDATE todos SET status = 'done' WHERE status = 'done'") // 保持不变
+            // priority 列类型无法直接改，用重建表方式迁移
+            db.execSQL("""
+                CREATE TABLE todos_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+                    note TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'todo',
+                    priority INTEGER NOT NULL DEFAULT 2, due_at INTEGER, remind_at INTEGER,
+                    tags TEXT DEFAULT '[]', created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL, done_at INTEGER
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO todos_new (id,title,note,status,priority,due_at,remind_at,tags,created_at,updated_at,done_at)
+                SELECT id, title, note,
+                    CASE status WHEN 'pending' THEN 'todo' ELSE status END,
+                    CASE priority WHEN 'high' THEN 1 WHEN 'low' THEN 3 ELSE 2 END,
+                    due_at, remind_at, tags, created_at, updated_at, NULL
+                FROM todos
+            """.trimIndent())
+            db.execSQL("DROP TABLE todos")
+            db.execSQL("ALTER TABLE todos_new RENAME TO todos")
+
+            // ---- study_plans ----
+            db.execSQL("ALTER TABLE study_plans ADD COLUMN goal TEXT DEFAULT ''")
+            db.execSQL("ALTER TABLE study_plans ADD COLUMN start_date INTEGER")
+            db.execSQL("ALTER TABLE study_plans ADD COLUMN end_date INTEGER")
+            db.execSQL("ALTER TABLE study_plans ADD COLUMN progress INTEGER DEFAULT 0")
+            db.execSQL("ALTER TABLE study_plans ADD COLUMN color TEXT DEFAULT '#0071e3'")
+
+            // ---- study_tasks ----
+            db.execSQL("ALTER TABLE study_tasks ADD COLUMN due_at INTEGER")
+            db.execSQL("ALTER TABLE study_tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
+            db.execSQL("UPDATE study_tasks SET status = 'todo' WHERE status = 'pending'")
+
+            // ---- notes ----
+            db.execSQL("ALTER TABLE notes ADD COLUMN tags TEXT DEFAULT '[]'")
+
+            // ---- schedules: 结构差异大，重建 ----
+            db.execSQL("""
+                CREATE TABLE schedules_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+                    note TEXT DEFAULT '', start_at INTEGER NOT NULL, end_at INTEGER NOT NULL,
+                    all_day INTEGER DEFAULT 0, color TEXT DEFAULT '#0071e3',
+                    remind_at INTEGER, repeat_rule TEXT DEFAULT '',
+                    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+                )
+            """.trimIndent())
+            // 旧数据：date+start_time+end_time → start_at/end_at（秒级时间戳 → ms）
+            db.execSQL("""
+                INSERT INTO schedules_new (id,title,note,start_at,end_at,all_day,color,remind_at,repeat_rule,created_at,updated_at)
+                SELECT id, title,
+                    COALESCE(description, ''),
+                    strftime('%s', date || CASE WHEN is_all_day=0 AND start_time!='' THEN ' '||start_time ELSE ' 00:00' END)*1000,
+                    strftime('%s', date || CASE WHEN is_all_day=0 AND end_time!='' THEN ' '||end_time ELSE ' 23:59' END)*1000,
+                    is_all_day,
+                    COALESCE(color, '#0071e3'),
+                    NULL, '',
+                    created_at, updated_at
+                FROM schedules
+            """.trimIndent())
+            db.execSQL("DROP TABLE schedules")
+            db.execSQL("ALTER TABLE schedules_new RENAME TO schedules")
+
+            // ---- reminders: description→body，去掉 updated_at ----
+            db.execSQL("""
+                CREATE TABLE reminders_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_type TEXT NOT NULL DEFAULT 'custom', source_id INTEGER,
+                    title TEXT NOT NULL, body TEXT DEFAULT '',
+                    remind_at INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO reminders_new (id,source_type,source_id,title,body,remind_at,status,created_at)
+                SELECT id,
+                    CASE WHEN source_type='' OR source_type IS NULL THEN 'custom' ELSE source_type END,
+                    source_id, title,
+                    COALESCE(description,''),
+                    remind_at, status, created_at
+                FROM reminders
+            """.trimIndent())
+            db.execSQL("DROP TABLE reminders")
+            db.execSQL("ALTER TABLE reminders_new RENAME TO reminders")
+
+            // ---- accounts: 字段全部重命名 ----
+            db.execSQL("""
+                CREATE TABLE accounts_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    platform TEXT NOT NULL DEFAULT '',
+                    platform_url TEXT NOT NULL DEFAULT '',
+                    account_name TEXT NOT NULL DEFAULT '',
+                    phone TEXT NOT NULL DEFAULT '',
+                    email TEXT NOT NULL DEFAULT '',
+                    password_enc TEXT NOT NULL DEFAULT '',
+                    note TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT 'other',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO accounts_new (id,platform,platform_url,account_name,phone,email,password_enc,note,category,created_at,updated_at)
+                SELECT id, platform, COALESCE(url,''), COALESCE(username,''),
+                    COALESCE(phone,''), COALESCE(email,''),
+                    COALESCE(password_encrypted,''), COALESCE(note,''),
+                    COALESCE(type,'other'),
+                    created_at, updated_at
+                FROM accounts
+            """.trimIndent())
+            db.execSQL("DROP TABLE accounts")
+            db.execSQL("ALTER TABLE accounts_new RENAME TO accounts")
+
+            // ---- favorites: 去掉 source 列 ----
+            db.execSQL("""
+                CREATE TABLE favorites_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL DEFAULT 'link',
+                    title TEXT NOT NULL DEFAULT '',
+                    url TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '',
+                    author TEXT NOT NULL DEFAULT '',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO favorites_new (id,type,title,url,content,author,tags,is_pinned,created_at,updated_at)
+                SELECT id,type,title,url,content,author,tags,is_pinned,created_at,updated_at
+                FROM favorites
+            """.trimIndent())
+            db.execSQL("DROP TABLE favorites")
+            db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -183,27 +324,33 @@ class DreamDBHelper(context: Context) :
 
     companion object {
         const val DB_NAME    = "dream.db"
-        const val DB_VERSION = 1
+        const val DB_VERSION = 2  // v2: 对齐 PC 端 Schema（字段名/类型/新字段）
 
         val DDL = listOf(
             """CREATE TABLE IF NOT EXISTS todos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 note TEXT DEFAULT '',
-                priority TEXT DEFAULT 'medium',
-                status TEXT DEFAULT 'pending',
+                status TEXT NOT NULL DEFAULT 'todo',
+                priority INTEGER NOT NULL DEFAULT 2,
                 due_at INTEGER,
                 remind_at INTEGER,
                 tags TEXT DEFAULT '[]',
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
+                updated_at INTEGER NOT NULL,
+                done_at INTEGER
             )""",
             """CREATE TABLE IF NOT EXISTS study_plans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 description TEXT DEFAULT '',
-                category TEXT DEFAULT 'study',
-                status TEXT DEFAULT 'active',
+                goal TEXT DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'study',
+                status TEXT NOT NULL DEFAULT 'active',
+                start_date INTEGER,
+                end_date INTEGER,
+                progress INTEGER DEFAULT 0,
+                color TEXT DEFAULT '#0071e3',
                 parent_id INTEGER,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
@@ -212,15 +359,18 @@ class DreamDBHelper(context: Context) :
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 plan_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
+                status TEXT NOT NULL DEFAULT 'todo',
+                due_at INTEGER,
+                sort_order INTEGER DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(plan_id) REFERENCES study_plans(id) ON DELETE CASCADE
             )""",
             """CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '无标题',
                 content TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
                 is_pinned INTEGER DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
@@ -228,49 +378,48 @@ class DreamDBHelper(context: Context) :
             """CREATE TABLE IF NOT EXISTS schedules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                date TEXT NOT NULL,
-                start_time TEXT DEFAULT '',
-                end_time TEXT DEFAULT '',
-                is_all_day INTEGER DEFAULT 0,
+                note TEXT DEFAULT '',
+                start_at INTEGER NOT NULL,
+                end_at INTEGER NOT NULL,
+                all_day INTEGER DEFAULT 0,
                 color TEXT DEFAULT '#0071e3',
+                remind_at INTEGER,
+                repeat_rule TEXT DEFAULT '',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )""",
             """CREATE TABLE IF NOT EXISTS reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                remind_at INTEGER NOT NULL,
-                status TEXT DEFAULT 'pending',
-                source_type TEXT DEFAULT '',
+                source_type TEXT NOT NULL DEFAULT 'custom',
                 source_id INTEGER,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
+                title TEXT NOT NULL,
+                body TEXT DEFAULT '',
+                remind_at INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL
             )""",
             """CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                platform TEXT NOT NULL,
-                type TEXT DEFAULT 'other',
-                username TEXT DEFAULT '',
-                email TEXT DEFAULT '',
-                phone TEXT DEFAULT '',
-                password_encrypted TEXT DEFAULT '',
-                url TEXT DEFAULT '',
-                note TEXT DEFAULT '',
+                platform TEXT NOT NULL DEFAULT '',
+                platform_url TEXT NOT NULL DEFAULT '',
+                account_name TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                email TEXT NOT NULL DEFAULT '',
+                password_enc TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'other',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )""",
             """CREATE TABLE IF NOT EXISTS favorites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                type TEXT DEFAULT 'link',
-                title TEXT NOT NULL,
-                url TEXT DEFAULT '',
-                content TEXT DEFAULT '',
-                author TEXT DEFAULT '',
-                source TEXT DEFAULT '',
-                tags TEXT DEFAULT '[]',
-                is_pinned INTEGER DEFAULT 0,
+                type TEXT NOT NULL DEFAULT 'link',
+                title TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                author TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '[]',
+                is_pinned INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )"""
