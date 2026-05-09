@@ -1,0 +1,19 @@
+dream/package.json
+  s_480aeee531d5af::t_fb5b67a9918d93 64-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "532457020bcf0d5a3593894dccafef262c232e88",
+  "prompts": {},
+  "sessions": {
+    "s_480aeee531d5af": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_2040dc888ffeSVCmfxzEnzwjUl",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
