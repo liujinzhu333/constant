@@ -46,7 +46,7 @@ export class StartupManager {
     // 2. 初始化日志（最先初始化）
     const logger = Logger.getInstance()
     logger.info('Startup', '========== Dream 基座启动 ==========')
-    logger.info('Startup', `版本: 1.0.0 | 平台: ${process.platform} | Arch: ${process.arch}`)
+    logger.info('Startup', `版本: 1.0.2 | 平台: ${process.platform} | Arch: ${process.arch}`)
     logger.info('Startup', `isDev: ${isDev}`)
 
     // 3. 初始化本地存储
