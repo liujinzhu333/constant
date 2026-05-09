@@ -76,14 +76,11 @@ export class SystemAdapter {
       minWidth,
       minHeight,
       title: options.title || 'Dream',
-      // macOS 原生风格
+      // macOS 原生风格（hiddenInset 不依赖 GPU，可安全使用）
       titleBarStyle: this.platform === 'darwin' ? 'hiddenInset' : 'default',
       trafficLightPosition: { x: 16, y: 16 },
-      // 毛玻璃效果（macOS）
-      vibrancy: this.platform === 'darwin' ? 'under-window' : undefined,
-      visualEffectState: this.platform === 'darwin' ? 'followWindow' : undefined,
-      backgroundColor: '#00000000',
-      transparent: this.platform === 'darwin',
+      // 不使用透明/毛玻璃：disable-gpu 模式下透明窗口会导致渲染进程崩溃
+      backgroundColor: '#ffffff',
       webPreferences: {
         preload: options.preloadPath || path.join(__dirname, '../../preload/index.js'),
         nodeIntegration: false,
