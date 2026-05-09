@@ -1,0 +1,21 @@
+dream/electron/modules/startup/index.ts
+  s_480aeee531d5af::t_ca7face10ca35f 49
+dream/package.json
+  s_480aeee531d5af::t_f9b6925aa91beb 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "3839a72c1c30c6cb22c65fd7eb78702c1a82f3ad",
+  "prompts": {},
+  "sessions": {
+    "s_480aeee531d5af": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_2040dc888ffeSVCmfxzEnzwjUl",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
