@@ -46,7 +46,7 @@ export class StartupManager {
     // 2. 初始化日志（最先初始化）
     const logger = Logger.getInstance()
     logger.info('Startup', '========== Dream 基座启动 ==========')
-    logger.info('Startup', `版本: 1.0.3 | 平台: ${process.platform} | Arch: ${process.arch}`)
+    logger.info('Startup', `版本: 1.0.4 | 平台: ${process.platform} | Arch: ${process.arch}`)
     logger.info('Startup', `isDev: ${isDev}`)
 
     // 3. 初始化本地存储
@@ -61,7 +61,15 @@ export class StartupManager {
     // 5. 等待 Electron 就绪
     await app.whenReady()
 
-    // 6. 创建主窗口
+    // 6. 启动本地 HTTP 服务（必须在 loadApp 之前，否则 loadURL 会 ERR_CONNECTION_REFUSED）
+    const httpServer = LocalHttpServer.getInstance()
+    if (!isDev) {
+      const webRoot = path.join(__dirname, '../../dist-web')
+      httpServer.setWebRoot(webRoot)
+    }
+    httpServer.start()
+
+    // 7. 创建主窗口
     logger.info('Startup', '创建主窗口...')
     const preloadPath = path.join(__dirname, '../preload/index.js')
     const mainWindow = system.createMainWindow({
@@ -69,28 +77,19 @@ export class StartupManager {
       preloadPath
     })
 
-    // 7. 加载页面
+    // 8. 加载页面
     await this.loadApp(mainWindow, logger)
 
-    // 8. 系统托盘
+    // 9. 系统托盘
     const iconPath = this.resolveTrayIcon()
     system.createTray(iconPath)
 
-    // 9. 注册全局快捷键
+    // 10. 注册全局快捷键
     system.registerShortcuts()
 
-    // 10. 初始化热更新模块
+    // 11. 初始化热更新模块
     const updater = UpdaterModule.getInstance()
     updater.init(mainWindow)
-
-    // 11. 启动本地 HTTP 服务（局域网 Web App + Chrome 插件调用）
-    const httpServer = LocalHttpServer.getInstance()
-    // 注入 dream-web 构建产物目录（生产模式下）
-    if (!isDev) {
-      const webRoot = path.join(__dirname, '../../dist-web')
-      httpServer.setWebRoot(webRoot)
-    }
-    httpServer.start()
 
     // 12. 二次激活时聚焦窗口
     app.on('second-instance', () => {
