@@ -61,7 +61,8 @@
     },
     "files": [
       "dist",
-      "dist-electron"
+      "dist-electron",
+      "dist-web"
     ],
     "mac": {
       "target": [
