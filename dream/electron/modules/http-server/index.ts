@@ -323,7 +323,7 @@ export class LocalHttpServer {
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
         db.prepare(`UPDATE todos SET ${sets},updated_at=? WHERE id=?`)
-          .run(...Object.values(safe), now(), m.params.id)
+          .run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM todos WHERE id=?').get(m.params.id))
     }
@@ -378,7 +378,7 @@ export class LocalHttpServer {
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
         db.prepare(`UPDATE study_plans SET ${sets},updated_at=? WHERE id=?`)
-          .run(...Object.values(safe), now(), m.params.id)
+          .run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM study_plans WHERE id=?').get(m.params.id))
     }
@@ -415,8 +415,10 @@ export class LocalHttpServer {
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
+        // better-sqlite3 不接受 undefined，统一转为 null
+        const vals = Object.values(safe).map(v => v === undefined ? null : v)
         db.prepare(`UPDATE study_tasks SET ${sets},updated_at=? WHERE id=?`)
-          .run(...Object.values(safe), now(), m.params.id)
+          .run(...vals, now(), m.params.id)
       }
       const task = db.prepare('SELECT * FROM study_tasks WHERE id=?').get(m.params.id) as any
       if (task) {
@@ -494,7 +496,7 @@ export class LocalHttpServer {
       if ('tags' in safe && Array.isArray(safe.tags)) safe.tags = JSON.stringify(safe.tags)
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
-        db.prepare(`UPDATE notes SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe), now(), m.params.id)
+        db.prepare(`UPDATE notes SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM notes WHERE id=?').get(m.params.id))
     }
@@ -533,7 +535,7 @@ export class LocalHttpServer {
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
-        db.prepare(`UPDATE schedules SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe), now(), m.params.id)
+        db.prepare(`UPDATE schedules SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM schedules WHERE id=?').get(m.params.id))
     }
@@ -571,7 +573,7 @@ export class LocalHttpServer {
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
-        db.prepare(`UPDATE reminders SET ${sets} WHERE id=?`).run(...Object.values(safe), m.params.id)
+        db.prepare(`UPDATE reminders SET ${sets} WHERE id=?`).run(...Object.values(safe).map(v => v === undefined ? null : v), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM reminders WHERE id=?').get(m.params.id))
     }
@@ -610,7 +612,7 @@ export class LocalHttpServer {
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
-        db.prepare(`UPDATE accounts SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe), now(), m.params.id)
+        db.prepare(`UPDATE accounts SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM accounts WHERE id=?').get(m.params.id))
     }
@@ -659,7 +661,7 @@ export class LocalHttpServer {
       if ('tags' in safe && Array.isArray(safe.tags)) safe.tags = JSON.stringify(safe.tags)
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
-        db.prepare(`UPDATE favorites SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe), now(), m.params.id)
+        db.prepare(`UPDATE favorites SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe).map(v => v === undefined ? null : v), now(), m.params.id)
       }
       return json(res, 200, db.prepare('SELECT * FROM favorites WHERE id=?').get(m.params.id))
     }

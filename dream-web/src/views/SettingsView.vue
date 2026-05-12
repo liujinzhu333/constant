@@ -83,19 +83,26 @@
           </el-card>
         </section>
 
-        <!-- Chrome 插件 / HTTP 服务 -->
+        <!-- 服务地址 / HTTP 服务 -->
         <section class="settings-section">
-          <h2 class="section-title">Chrome 插件</h2>
+          <h2 class="section-title">服务地址</h2>
           <el-card shadow="never">
             <el-descriptions :column="1" border>
               <el-descriptions-item label="服务状态">
                 <el-tag :type="httpRunning ? 'success' : 'info'">
-                  {{ httpRunning ? `运行中（端口 ${httpPort}）` : '已停止' }}
+                  {{ httpRunning ? '运行中' : '已停止' }}
                 </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item v-if="httpRunning" label="访问地址">
+                <div class="lan-url-row">
+                  <el-text class="lan-url-text">{{ httpLanUrl }}</el-text>
+                  <el-button link size="small" @click="copyLanUrl">复制</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="说明">
                 <el-text size="small" type="info">
-                  开启后 Chrome 插件可将网页收藏到当前运行的 Dream 实例
+                  开启后所有 Web 项目（浏览器插件、移动端等）均可通过本地 HTTP 服务访问当前 Dream 实例数据。
+                  生产环境端口 45678，开发环境端口 45679，两者互不冲突。
                 </el-text>
               </el-descriptions-item>
             </el-descriptions>
@@ -148,6 +155,11 @@
 
       <!-- ── Web 环境：PC 服务连接 ── -->
       <template v-else>
+        <!-- 离线提示条 -->
+        <div v-if="conn?.isOffline" class="offline-banner">
+          当前处于离线模式，仅展示缓存数据，写操作不可用
+        </div>
+
         <section class="settings-section">
           <h2 class="section-title">PC 服务连接</h2>
           <el-card shadow="never">
@@ -165,9 +177,71 @@
               <el-input v-model="customHost" placeholder="例：192.168.1.100:45678" style="max-width:260px" clearable />
               <el-button type="primary" :loading="pingStatus === 'checking'" @click="connectToServer">连接</el-button>
               <el-button @click="resetServerAddress">重置</el-button>
+              <el-button
+                v-if="conn?.isOnline"
+                type="warning"
+                plain
+                @click="disconnectServer"
+              >断开连接</el-button>
+              <el-button
+                v-else-if="conn?.isOffline"
+                type="success"
+                :loading="pingStatus === 'checking'"
+                @click="reconnectAndSync"
+              >重新连接</el-button>
             </div>
             <el-text size="small" type="info" style="margin-top:8px;display:block">
-              局域网内手机可通过 PC 的 IP 地址访问 Dream 数据，默认连接 localhost:45678。
+              局域网内手机可通过 PC 的 IP 地址访问 Dream 数据，默认连接 localhost:{{ DEV_PORT }}。
+              断开后进入离线模式，可浏览缓存数据。
+            </el-text>
+          </el-card>
+        </section>
+
+        <!-- 离线同步 -->
+        <section class="settings-section">
+          <h2 class="section-title">离线同步</h2>
+          <el-card shadow="never">
+            <el-descriptions :column="1" border style="margin-bottom:16px">
+              <el-descriptions-item label="待同步操作">
+                <el-tag :type="conn?.pendingQueueCount ? 'warning' : 'success'">
+                  {{ conn?.pendingQueueCount ? `${conn.pendingQueueCount} 条待同步` : '无待同步' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item v-if="lastSyncResult" label="上次同步">
+                <el-text size="small" :type="lastSyncResult.failed > 0 ? 'warning' : 'success'">
+                  成功 {{ lastSyncResult.replayed }} 条，失败 {{ lastSyncResult.failed }} 条
+                </el-text>
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <!-- 失败详情 -->
+            <div v-if="lastSyncResult && lastSyncResult.errors.length > 0" class="sync-errors">
+              <div class="sync-errors-header">
+                <el-text size="small" type="warning">以下操作同步失败，数据已保留，可重新同步或手动处理：</el-text>
+              </div>
+              <div v-for="(err, i) in lastSyncResult.errors" :key="i" class="sync-error-item">
+                <el-text size="small" type="danger" class="sync-error-msg">{{ err }}</el-text>
+              </div>
+            </div>
+
+            <div class="data-actions">
+              <el-button
+                type="primary"
+                :loading="conn?.syncing"
+                :disabled="!conn?.isOnline || !conn?.pendingQueueCount"
+                @click="manualSync"
+              >
+                {{ conn?.syncing ? '同步中...' : '立即同步' }}
+              </el-button>
+              <el-button
+                plain
+                :disabled="!conn?.pendingQueueCount"
+                @click="clearOfflineQueue"
+              >丢弃全部离线数据</el-button>
+            </div>
+            <el-text size="small" type="info" style="margin-top:8px;display:block">
+              同步失败的数据会保留在队列中，可点击「立即同步」重试。
+              确认数据无需保留时，再选择丢弃。
             </el-text>
           </el-card>
         </section>
@@ -182,7 +256,13 @@ import { RouterLink } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { isElectron, isMac } from '../utils/env'
+import { useConnectionStore, type SyncResult } from '../stores/connection'
+import { clearQueue } from '../utils/offline-queue'
+import { setApiBase } from '../utils/api'
 import type { BackupInfo } from '../env'
+
+const conn = isElectron ? null : useConnectionStore()
+const lastSyncResult = ref<SyncResult | null>(null)
 
 // ── 关于 ──────────────────────────────────────────────────────────
 const baseVersion = ref('1.0.0')
@@ -217,6 +297,7 @@ const backups = ref<BackupInfo[]>([])
 // ── HTTP 服务 ─────────────────────────────────────────────────────
 const httpRunning = ref(false)
 const httpPort = ref(45678)
+const httpLanUrl = ref('')
 const httpToggling = ref(false)
 
 // ── 日志查看器 ────────────────────────────────────────────────────
@@ -232,7 +313,9 @@ const logViewerRef = ref<HTMLElement | null>(null)
 
 // ── Web 连接设置 ──────────────────────────────────────────────────
 const API_BASE_KEY = 'dream_api_base'
-const DEFAULT_BASE = `${location.protocol}//${location.hostname}:45678`
+// 开发时（5174）代理到 45679，生产时同源（45678）
+const DEV_PORT = location.port === '5174' ? 45679 : 45678
+const DEFAULT_BASE = `${location.protocol}//${location.hostname}:${DEV_PORT}`
 const currentBase = ref(localStorage.getItem(API_BASE_KEY) || DEFAULT_BASE)
 const customHost = ref('')
 const pingStatus = ref<'idle' | 'checking' | 'ok' | 'error'>('idle')
@@ -258,6 +341,7 @@ onMounted(async () => {
     const httpStatus = await api.httpServer.status()
     httpRunning.value = httpStatus.running
     httpPort.value = httpStatus.port
+    httpLanUrl.value = httpStatus.lanUrl ?? `http://localhost:${httpStatus.port}`
     removeStatusListener = api.updater.onStatus(async (data) => {
       updateStatus.value = data.status
       if (data.status === 'downloaded') {
@@ -397,8 +481,13 @@ async function startHttpServer() {
   httpToggling.value = true
   try {
     const result = await api.httpServer.start()
-    if (result.success) { httpRunning.value = true; httpPort.value = result.port ?? 45678; ElMessage.success(`HTTP 服务已启动（端口 ${httpPort.value}）`) }
-    else { ElMessage.error(result.error ?? '启动失败') }
+    if (result.success) {
+      const s = await api.httpServer.status()
+      httpRunning.value = s.running
+      httpPort.value = s.port
+      httpLanUrl.value = s.lanUrl ?? `http://localhost:${s.port}`
+      ElMessage.success(`HTTP 服务已启动（${httpLanUrl.value}）`)
+    } else { ElMessage.error(result.error ?? '启动失败') }
   } finally { httpToggling.value = false }
 }
 
@@ -407,9 +496,15 @@ async function stopHttpServer() {
   httpToggling.value = true
   try {
     const result = await api.httpServer.stop()
-    if (result.success) { httpRunning.value = false; ElMessage.success('HTTP 服务已停止') }
+    if (result.success) { httpRunning.value = false; httpLanUrl.value = ''; ElMessage.success('HTTP 服务已停止') }
     else { ElMessage.error(result.error ?? '停止失败') }
   } finally { httpToggling.value = false }
+}
+
+async function copyLanUrl() {
+  if (!httpLanUrl.value) return
+  await navigator.clipboard.writeText(httpLanUrl.value)
+  ElMessage.success('已复制')
 }
 
 // ── Electron：日志查看器 ──────────────────────────────────────────
@@ -481,7 +576,7 @@ async function clearAllLogs() {
 async function connectToServer() {
   let base = customHost.value.trim()
   if (!base) { ElMessage.warning('请输入服务地址'); return }
-  if (!/^https?:\/\//.test(base)) base = `http://${base}`
+  if (!/^https?:\/\//.test(base)) base = `https://${base}`
   base = base.replace(/\/$/, '')
   pingStatus.value = 'checking'
   try {
@@ -489,8 +584,12 @@ async function connectToServer() {
     if (res.ok) {
       currentBase.value = base
       localStorage.setItem(API_BASE_KEY, base)
+      setApiBase(base)   // 立即生效，无需刷新页面
       pingStatus.value = 'ok'
-      ElMessage.success(`已连接到 ${base}，刷新页面后生效`)
+      conn?.setOnline()
+      // 连接成功后刷新各 store 数据
+      await conn?.sync()
+      ElMessage.success(`已连接到 ${base}`)
     } else { pingStatus.value = 'error'; ElMessage.error(`服务响应异常（${res.status}）`) }
   } catch { pingStatus.value = 'error'; ElMessage.error('无法连接，请检查 PC 端是否已启动') }
 }
@@ -500,15 +599,84 @@ function resetServerAddress() {
   currentBase.value = DEFAULT_BASE
   customHost.value = ''
   pingStatus.value = 'idle'
-  ElMessage.info('已重置为默认地址，刷新页面后生效')
+  setApiBase('')   // 恢复相对路径
+  conn?.setOnline()
+  ElMessage.info('已重置为默认地址')
 }
 
 async function checkCurrentPing() {
   pingStatus.value = 'checking'
   try {
     const res = await fetch(`${currentBase.value}/ping`, { signal: AbortSignal.timeout(3000) })
-    pingStatus.value = res.ok ? 'ok' : 'error'
-  } catch { pingStatus.value = 'error' }
+    if (res.ok) { pingStatus.value = 'ok'; conn?.setOnline() }
+    else { pingStatus.value = 'error'; conn?.setOffline() }
+  } catch { pingStatus.value = 'error'; conn?.setOffline() }
+}
+
+async function disconnectServer() {
+  try {
+    await ElMessageBox.confirm(
+      '断开后将进入离线模式，可浏览缓存数据，但无法新增或修改内容。',
+      '断开连接',
+      { confirmButtonText: '断开', cancelButtonText: '取消', type: 'warning' }
+    )
+    conn?.disconnect()
+    pingStatus.value = 'error'
+    ElMessage.info('已断开连接，当前使用缓存数据')
+  } catch { /* 用户取消 */ }
+}
+
+/** 重新连接并自动同步离线数据 */
+async function reconnectAndSync() {
+  const ok = await conn?.reconnect(currentBase.value)
+  if (ok) {
+    pingStatus.value = 'ok'
+    setApiBase(currentBase.value)  // 恢复 baseURL
+    const pending = conn?.pendingQueueCount ?? 0
+    if (pending > 0) {
+      ElMessage.info(`重连成功，正在同步 ${pending} 条离线数据...`)
+      const result = await conn?.sync()
+      lastSyncResult.value = result ?? null
+      if (result && result.failed === 0) {
+        ElMessage.success(`同步完成：${result.replayed} 条数据已上传`)
+      } else if (result && result.failed > 0) {
+        ElMessage.warning(`同步部分完成：${result.replayed} 条成功，${result.failed} 条失败`)
+      }
+    } else {
+      ElMessage.success('重连成功')
+    }
+  } else {
+    pingStatus.value = 'error'
+    ElMessage.error('连接失败，请检查 PC 端是否已启动')
+  }
+}
+
+/** 手动触发同步 */
+async function manualSync() {
+  if (!conn?.isOnline) { ElMessage.warning('请先连接到服务'); return }
+  const result = await conn?.sync()
+  lastSyncResult.value = result ?? null
+  if (!result) return
+  if (result.failed === 0) {
+    ElMessage.success(`同步完成：${result.replayed} 条数据已上传，${result.refreshed} 个模块已刷新`)
+  } else {
+    ElMessage.warning(`同步部分完成：${result.replayed} 条成功，${result.failed} 条失败`)
+  }
+}
+
+/** 丢弃全部离线数据 */
+async function clearOfflineQueue() {
+  try {
+    await ElMessageBox.confirm(
+      '将丢弃所有离线期间的未同步操作，此操作不可恢复。',
+      '丢弃离线数据',
+      { confirmButtonText: '确认丢弃', cancelButtonText: '取消', type: 'warning' }
+    )
+    clearQueue()
+    conn?.refreshPendingCount()
+    lastSyncResult.value = null
+    ElMessage.success('离线数据已清除')
+  } catch { /* 用户取消 */ }
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────────
@@ -592,6 +760,55 @@ function logLineClass(line: string): string {
 .log-debug { color: #74c0fc; }
 .log-info  { color: #c9d1d9; }
 
+.offline-banner {
+  background: var(--el-color-warning-light-9);
+  border: 1px solid var(--el-color-warning-light-5);
+  color: var(--el-color-warning-dark-2);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
 .server-input-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .server-input-row :deep(.el-button + .el-button) { margin-left: 0; }
+
+.lan-url-row { display: flex; align-items: center; gap: 8px; }
+.lan-url-text { font-family: 'SF Mono','Fira Code',monospace; font-size: 13px; word-break: break-all; }
+
+/* 离线同步失败详情 */
+.sync-errors {
+  margin-bottom: 16px;
+  border: 1px solid var(--el-color-warning-light-5);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+}
+.sync-errors-header {
+  background: var(--el-color-warning-light-9);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-color-warning-light-5);
+}
+.sync-error-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-fill-color);
+  background: var(--el-fill-color-extra-light, #fafafa);
+}
+.sync-error-item:last-child { border-bottom: none; }
+.sync-error-path {
+  flex: 1;
+  font-family: 'SF Mono','Fira Code',monospace;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+  min-width: 0;
+}
+.sync-error-msg {
+  flex-shrink: 0;
+  max-width: 160px;
+  text-align: right;
+  font-size: 11px;
+  word-break: break-word;
+}
 </style>
