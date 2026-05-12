@@ -1,0 +1,56 @@
+dream-web/src/views/SettingsView.vue
+  s_f472def30f714e::t_f786f7e7b45391 774-776
+  s_f472def30f714e::t_3eccfe596a7751 206-208,212,216-222,224-226,240,243-244
+  s_f472def30f714e::t_97fe2a4dd08100 190,196-205,209-211,213-215,227-239,241-242
+  s_f472def30f714e::t_10e3e86ed3daf4 344
+  s_f472def30f714e::t_28b35f6d399a31 194
+  s_f472def30f714e::t_35b65d9bcac4d4 264
+  s_f472def30f714e::t_f5456c5790cd17 86,88,104-105
+  s_f472def30f714e::t_2c23d5cd8682a2 259-260,265
+  s_f472def30f714e::t_0eb970b9a23bd8 300
+  s_f472def30f714e::t_6f09aee34ba560 316-318
+  s_f472def30f714e::t_4ea9222a8c573d 763-771
+  s_f472def30f714e::t_ffe83c60fc9e60 777-813
+  s_f472def30f714e::t_237daa1860ec24 589,611-626
+  s_f472def30f714e::t_6e569c2dff6e84 484-490,499,504-507
+  s_f472def30f714e::t_17503fe1e83592 261
+  s_f472def30f714e::t_e19452bb8004f9 93,96-100
+  s_f472def30f714e::t_9114c869c14e3c 158-162,180-189,191,195
+  s_f472def30f714e::t_faafc04162716a 634
+  s_f472def30f714e::t_6f69a13c8bb0e3 579,587,590-592,602-604
+  s_f472def30f714e::t_216e60687862d4 629-633,635-679
+  s_35a9999416f564::t_878b98ba87c14a 223
+dream/electron/modules/http-server/index.ts
+  s_35a9999416f564::t_27e54c4d282480 326
+  s_35a9999416f564::t_1cea8dafee0e0c 499
+  s_35a9999416f564::t_26d1423afd565b 664
+  s_35a9999416f564::t_39034259818884 576
+  s_35a9999416f564::t_a1fdcacdc469ab 418-419,421
+  s_35a9999416f564::t_c8d9177027f048 615
+  s_35a9999416f564::t_e1dc6c977b75c6 381
+  s_35a9999416f564::t_cd9beae19f2955 538
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a1cbaee5312e7b9b49811eab6a6d5cea14a4cac2",
+  "prompts": {},
+  "sessions": {
+    "s_35a9999416f564": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e5b39d03ffeCTxgiq9lGz1bFi",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    },
+    "s_f472def30f714e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1f42258d9ffe684Mu5JcrH4pEM",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
