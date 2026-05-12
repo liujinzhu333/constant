@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { studyApi, checkinApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, type StudyPlan, type StudyTask, type StudyCheckin, type PlanCategory } from '../utils/api'
+import { studyApi, checkinApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, isApiOffline, type StudyPlan, type StudyTask, type StudyCheckin, type PlanCategory } from '../utils/api'
 import { useConnectionStore } from './connection'
 
 export type { StudyPlan, StudyTask, StudyCheckin, PlanCategory }
@@ -297,14 +297,17 @@ export const useStudyStore = defineStore('study', () => {
       const allDone = tasks.value.length > 0 && tasks.value.every(t => t.status === 'done')
       const alreadyChecked = checkins.value.some(c => c.date === today)
       if (allDone && !alreadyChecked) {
-        // 全部完成 → 本地插入今日打卡记录
         checkins.value = [...checkins.value, { id: `local_${today}`, plan_id: planId, date: today, note: '', created_at: Math.floor(Date.now() / 1000) }]
       } else if (!allDone && alreadyChecked) {
-        // 不再全部完成 → 移除今日打卡记录
         checkins.value = checkins.value.filter(c => c.date !== today)
       }
       // 在线时额外从服务端同步一次（服务端 tryAutoCheckin 已写入真实记录）
-      checkinApi.list(planId, 3).then(list => { checkins.value = list }).catch(() => {/* 离线时忽略 */})
+      // 离线时跳过，否则会用空数组覆盖刚写入的本地打卡记录
+      if (!isApiOffline()) {
+        checkinApi.list(planId, 3).then(list => {
+          checkins.value = list
+        }).catch(() => {/* 忽略 */})
+      }
     }
   }
 
