@@ -1,0 +1,19 @@
+dream-web/src/stores/study.ts
+  s_35a9999416f564::t_a69fb7edc802d9 276-277,295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "116c6fe7bc6d3e38e9e1e710c444284ed5e4d23c",
+  "prompts": {},
+  "sessions": {
+    "s_35a9999416f564": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e5b39d03ffeCTxgiq9lGz1bFi",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
