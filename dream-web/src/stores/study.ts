@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { studyApi, type StudyPlan, type StudyTask, type PlanCategory } from '../utils/api'
+import { studyApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, type StudyPlan, type StudyTask, type PlanCategory } from '../utils/api'
+import { useConnectionStore } from './connection'
 
 export type { StudyPlan, StudyTask, PlanCategory }
 
@@ -13,6 +14,8 @@ export const PLAN_CATEGORIES: { value: PlanCategory | 'all'; label: string; icon
   { value: 'finance', label: '财务',   icon: '💰',  color: '#af52de' },
 ]
 
+const now = () => Math.floor(Date.now() / 1000)
+
 export const useStudyStore = defineStore('study', () => {
   const plans = ref<StudyPlan[]>([])
   const currentPlan = ref<StudyPlan | null>(null)
@@ -20,7 +23,6 @@ export const useStudyStore = defineStore('study', () => {
   const loading = ref(false)
   const activeCategory = ref<PlanCategory | 'all'>('all')
 
-  // 子计划相关
   const subPlans = ref<StudyPlan[]>([])
   const currentSubPlan = ref<StudyPlan | null>(null)
   const subTasks = ref<StudyTask[]>([])
@@ -53,7 +55,6 @@ export const useStudyStore = defineStore('study', () => {
     currentPlan.value = plan
     currentSubPlan.value = null
     subTasks.value = []
-    // 并行加载任务 + 子计划
     const [t, s] = await Promise.all([
       studyApi.taskList(plan.id),
       studyApi.subPlanList(plan.id),
@@ -66,13 +67,33 @@ export const useStudyStore = defineStore('study', () => {
     title: string; description?: string; goal?: string
     category?: PlanCategory; color?: string
   }) {
-    const plan = await studyApi.planAdd(data)
+    const t = now()
+    const plan = await offlinePost<StudyPlan>(
+      '/api/study/plans',
+      data as Record<string, unknown>,
+      (tempId) => ({
+        id: tempId, title: data.title,
+        description: data.description ?? '', goal: data.goal ?? '',
+        category: data.category ?? 'study', status: 'active',
+        start_date: null, end_date: null, progress: 0,
+        color: data.color ?? '#0071e3', parent_id: null,
+        created_at: t, updated_at: t,
+        taskCount: 0, doneCount: 0, subPlanCount: 0,
+        task_count: 0, done_count: 0, sub_plan_count: 0,
+      }),
+    )
     plans.value.unshift({ ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 })
     return plan
   }
 
   async function updatePlan(id: string, data: Partial<StudyPlan>) {
-    const updated = await studyApi.planUpdate(id, data as Record<string, unknown>)
+    const current = plans.value.find(p => p.id === id)
+    if (!current) return
+    const updated = await offlinePatch<StudyPlan>(
+      `/api/study/plans/${id}`,
+      data as Record<string, unknown>,
+      current,
+    )
     const idx = plans.value.findIndex(p => p.id === id)
     if (idx !== -1 && updated) {
       plans.value[idx] = { ...plans.value[idx], ...updated }
@@ -81,14 +102,11 @@ export const useStudyStore = defineStore('study', () => {
   }
 
   async function deletePlan(id: string) {
-    await studyApi.planDelete(id)
+    await offlineDelete(`/api/study/plans/${id}`)
     plans.value = plans.value.filter(p => p.id !== id)
     if (currentPlan.value?.id === id) {
-      currentPlan.value = null
-      tasks.value = []
-      subPlans.value = []
-      currentSubPlan.value = null
-      subTasks.value = []
+      currentPlan.value = null; tasks.value = []
+      subPlans.value = []; currentSubPlan.value = null; subTasks.value = []
     }
   }
 
@@ -112,20 +130,54 @@ export const useStudyStore = defineStore('study', () => {
     title: string; description?: string; goal?: string; color?: string
   }) {
     if (!currentPlan.value) return
-    const plan = await studyApi.planAdd({
-      ...data,
-      category: currentPlan.value.category,
-      parent_id: currentPlan.value.id,
-    })
+    const t = now()
+    const plan = await offlinePost<StudyPlan>(
+      '/api/study/plans',
+      { ...data, category: currentPlan.value.category, parent_id: currentPlan.value.id } as Record<string, unknown>,
+      (tempId) => ({
+        id: tempId, title: data.title,
+        description: data.description ?? '', goal: data.goal ?? '',
+        category: currentPlan.value!.category, status: 'active',
+        start_date: null, end_date: null, progress: 0,
+        color: data.color ?? '#0071e3', parent_id: currentPlan.value!.id,
+        created_at: t, updated_at: t,
+        taskCount: 0, doneCount: 0, subPlanCount: 0,
+        task_count: 0, done_count: 0, sub_plan_count: 0,
+      }),
+    )
     subPlans.value.push({ ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 })
-    // 更新顶层计划的 subPlanCount
     const idx = plans.value.findIndex(p => p.id === currentPlan.value!.id)
     if (idx !== -1) plans.value[idx].subPlanCount = (plans.value[idx].subPlanCount ?? 0) + 1
+
+    // 离线时 offlinePost 会把数据写入 /api/study/plans 的缓存（顶层计划列表），
+    // 但子计划的缓存 key 是 /api/study/plans?parent_id=<id>，需要单独写入，
+    // 否则切换计划后 subPlanList 走离线缓存时读不到该子计划。
+    // 同时要从顶层计划缓存中移除被错误插入的子计划条目（parent_id != null 的不属于顶层）。
+    if ((plan as StudyPlan & { _offline?: boolean })._offline) {
+      const parentId = currentPlan.value!.id
+
+      // 1. 写入子计划专属缓存
+      const subCachePath = `/api/study/plans?parent_id=${parentId}`
+      const subCached = readCache<StudyPlan[]>(subCachePath) ?? []
+      writeCache(subCachePath, [...subCached, plan])
+
+      // 2. 从顶层计划缓存中移除被错误插入的子计划（parent_id 不为 null 的条目）
+      const topCachePath = `/api/study/plans?parent_id=null`
+      const topCached = readCache<StudyPlan[]>(topCachePath) ?? []
+      writeCache(topCachePath, topCached.filter(p => p.id !== plan.id))
+    }
+
     return plan
   }
 
   async function updateSubPlan(id: string, data: Partial<StudyPlan>) {
-    const updated = await studyApi.planUpdate(id, data as Record<string, unknown>)
+    const current = subPlans.value.find(p => p.id === id)
+    if (!current) return
+    const updated = await offlinePatch<StudyPlan>(
+      `/api/study/plans/${id}`,
+      data as Record<string, unknown>,
+      current,
+    )
     const idx = subPlans.value.findIndex(p => p.id === id)
     if (idx !== -1 && updated) {
       subPlans.value[idx] = { ...subPlans.value[idx], ...updated }
@@ -134,78 +186,126 @@ export const useStudyStore = defineStore('study', () => {
   }
 
   async function deleteSubPlan(id: string) {
-    await studyApi.planDelete(id)
+    await offlineDelete(`/api/study/plans/${id}`)
     subPlans.value = subPlans.value.filter(p => p.id !== id)
-    if (currentSubPlan.value?.id === id) {
-      currentSubPlan.value = null
-      subTasks.value = []
-    }
-    // 更新顶层计划 subPlanCount
+    if (currentSubPlan.value?.id === id) { currentSubPlan.value = null; subTasks.value = [] }
     if (currentPlan.value) {
       const idx = plans.value.findIndex(p => p.id === currentPlan.value!.id)
-      if (idx !== -1 && (plans.value[idx].subPlanCount ?? 0) > 0) {
+      if (idx !== -1 && (plans.value[idx].subPlanCount ?? 0) > 0)
         plans.value[idx].subPlanCount = (plans.value[idx].subPlanCount ?? 1) - 1
-      }
     }
   }
 
-  // ==================== 顶层计划任务 ====================
+  // ==================== 任务 ====================
 
   async function addTask(title: string, due_at?: number) {
     if (!currentPlan.value) return
-    const task = await studyApi.taskAdd(currentPlan.value.id, { title, due_at })
+    const t = now()
+    const planId = currentPlan.value.id
+    const task = await offlinePost<StudyTask>(
+      '/api/study/tasks',
+      { plan_id: planId, title, due_at },
+      (tempId) => ({
+        id: tempId, plan_id: planId,
+        title, status: 'todo' as const, due_at: due_at ?? null,
+        sort_order: tasks.value.length + 1, created_at: t, updated_at: t,
+      }),
+    )
     tasks.value.push(task)
     syncProgress('top')
+
+    // 离线时 offlinePost 写入 /api/study/tasks（无查询参数），
+    // 但 taskList 读缓存路径是 /api/study/tasks?plan_id=<id>，key 不一致导致切换计划后任务丢失。
+    // 需要手动写入正确的任务缓存，并从无参数的通用缓存中移除错误插入的条目。
+    if ((task as StudyTask & { _offline?: boolean })._offline) {
+      const taskCachePath = `/api/study/tasks?plan_id=${planId}`
+      const cached = readCache<StudyTask[]>(taskCachePath) ?? []
+      writeCache(taskCachePath, [...cached, task])
+
+      const genericCachePath = '/api/study/tasks'
+      const genericCached = readCache<StudyTask[]>(genericCachePath) ?? []
+      writeCache(genericCachePath, genericCached.filter(t => t.id !== task.id))
+    }
   }
 
   async function toggleTask(task: StudyTask) {
     if (!currentPlan.value) return
-    if (task.status === 'todo') {
-      await studyApi.taskDone(task.id)
-      task.status = 'done'
-    } else {
-      await studyApi.taskUndone(task.id)
-      task.status = 'todo'
-    }
+    const planId = currentPlan.value.id
+    const patch = task.status === 'todo'
+      ? { status: 'done' as const }
+      : { status: 'todo' as const }
+    await offlinePatch<StudyTask>(`/api/study/tasks/${task.id}`, patch, task)
+    // 乐观更新内存（用 map 替换，保证 Vue 响应式追踪）
+    const idx = tasks.value.findIndex(t => t.id === task.id)
+    if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], ...patch }
     syncProgress('top')
+
+    // offlinePatch 内部 listPathOf 得到 /api/study/tasks（无 plan_id），
+    // 实际缓存 key 是 /api/study/tasks?plan_id=<id>，需手动修正缓存。
+    const taskCachePath = `/api/study/tasks?plan_id=${planId}`
+    const cached = readCache<StudyTask[]>(taskCachePath) ?? []
+    writeCache(taskCachePath, cached.map(t => t.id === task.id ? { ...t, ...patch } : t))
   }
 
   async function deleteTask(id: string) {
     if (!currentPlan.value) return
-    await studyApi.taskDelete(id)
+    await offlineDelete(`/api/study/tasks/${id}`)
     tasks.value = tasks.value.filter(t => t.id !== id)
     syncProgress('top')
   }
 
-  // ==================== 子计划任务 ====================
-
   async function addSubTask(title: string, due_at?: number) {
     if (!currentSubPlan.value) return
-    const task = await studyApi.taskAdd(currentSubPlan.value.id, { title, due_at })
+    const t = now()
+    const planId = currentSubPlan.value.id
+    const task = await offlinePost<StudyTask>(
+      '/api/study/tasks',
+      { plan_id: planId, title, due_at },
+      (tempId) => ({
+        id: tempId, plan_id: planId,
+        title, status: 'todo' as const, due_at: due_at ?? null,
+        sort_order: subTasks.value.length + 1, created_at: t, updated_at: t,
+      }),
+    )
     subTasks.value.push(task)
     syncProgress('sub')
+
+    // 同 addTask，离线时写入正确的子计划任务缓存路径，并清理通用缓存中的错误条目。
+    if ((task as StudyTask & { _offline?: boolean })._offline) {
+      const taskCachePath = `/api/study/tasks?plan_id=${planId}`
+      const cached = readCache<StudyTask[]>(taskCachePath) ?? []
+      writeCache(taskCachePath, [...cached, task])
+
+      const genericCachePath = '/api/study/tasks'
+      const genericCached = readCache<StudyTask[]>(genericCachePath) ?? []
+      writeCache(genericCachePath, genericCached.filter(t => t.id !== task.id))
+    }
   }
 
   async function toggleSubTask(task: StudyTask) {
     if (!currentSubPlan.value) return
-    if (task.status === 'todo') {
-      await studyApi.taskDone(task.id)
-      task.status = 'done'
-    } else {
-      await studyApi.taskUndone(task.id)
-      task.status = 'todo'
-    }
+    const planId = currentSubPlan.value.id
+    const patch = task.status === 'todo'
+      ? { status: 'done' as const }
+      : { status: 'todo' as const }
+    await offlinePatch<StudyTask>(`/api/study/tasks/${task.id}`, patch, task)
+    // 乐观更新内存（用 map 替换，保证 Vue 响应式追踪）
+    const idx = subTasks.value.findIndex(t => t.id === task.id)
+    if (idx !== -1) subTasks.value[idx] = { ...subTasks.value[idx], ...patch }
     syncProgress('sub')
+
+    // 同 toggleTask，手动修正缓存 key
+    const taskCachePath = `/api/study/tasks?plan_id=${planId}`
+    const cached = readCache<StudyTask[]>(taskCachePath) ?? []
+    writeCache(taskCachePath, cached.map(t => t.id === task.id ? { ...t, ...patch } : t))
   }
 
   async function deleteSubTask(id: string) {
     if (!currentSubPlan.value) return
-    await studyApi.taskDelete(id)
+    await offlineDelete(`/api/study/tasks/${id}`)
     subTasks.value = subTasks.value.filter(t => t.id !== id)
     syncProgress('sub')
   }
-
-  // ==================== 进度同步 ====================
 
   function syncProgress(level: 'top' | 'sub') {
     if (level === 'top') {
@@ -217,9 +317,14 @@ export const useStudyStore = defineStore('study', () => {
       if (idx !== -1) {
         plans.value[idx] = { ...plans.value[idx], progress, taskCount: total, doneCount: done }
         currentPlan.value = plans.value[idx]
+        // 同步写入顶层计划缓存，防止切换后统计数据丢失
+        const topCachePath = `/api/study/plans?parent_id=null`
+        const topCached = readCache<StudyPlan[]>(topCachePath) ?? []
+        writeCache(topCachePath, topCached.map(p => p.id === currentPlan.value!.id ? plans.value[idx] : p))
       }
     } else {
       if (!currentSubPlan.value) return
+      const parentId = currentPlan.value?.id
       const total = subTasks.value.length
       const done = subTasks.value.filter(t => t.status === 'done').length
       const progress = total > 0 ? Math.round((done / total) * 100) : 0
@@ -227,9 +332,18 @@ export const useStudyStore = defineStore('study', () => {
       if (idx !== -1) {
         subPlans.value[idx] = { ...subPlans.value[idx], progress, taskCount: total, doneCount: done }
         currentSubPlan.value = subPlans.value[idx]
+        // 同步写入子计划缓存，防止切换后统计数据丢失
+        if (parentId) {
+          const subCachePath = `/api/study/plans?parent_id=${parentId}`
+          const subCached = readCache<StudyPlan[]>(subCachePath) ?? []
+          writeCache(subCachePath, subCached.map(p => p.id === currentSubPlan.value!.id ? subPlans.value[idx] : p))
+        }
       }
     }
   }
+
+  // 向 connection store 注册数据刷新回调（重连同步时重载顶层计划列表）
+  useConnectionStore().registerRefresh(() => loadPlans())
 
   return {
     plans, currentPlan, tasks, loading, activeCategory,
