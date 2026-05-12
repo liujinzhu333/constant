@@ -21,6 +21,9 @@ export interface StudyPlan {
   status: string; start_date: number | null; end_date: number | null
   progress: number; color: string; created_at: number; updated_at: number
   parent_id: string | null
+  checkin_enabled: number        // 0=关闭 1=开启
+  checkin_goal: string           // 打卡文字目标
+  checkin_target_days: number    // 连续打卡目标天数
   taskCount?: number; doneCount?: number; subPlanCount?: number
 }
 
@@ -153,7 +156,7 @@ export interface DreamAPI {
   }
   study: {
     planList: (category?: string) => Promise<StudyPlan[]>
-    planAdd: (data: { title: string; description?: string; goal?: string; category?: string; start_date?: number; end_date?: number; color?: string; parent_id?: string }) => Promise<StudyPlan>
+    planAdd: (data: { title: string; description?: string; goal?: string; category?: string; start_date?: number; end_date?: number; color?: string; parent_id?: string; checkin_enabled?: number; checkin_goal?: string; checkin_target_days?: number }) => Promise<StudyPlan>
     planUpdate: (id: string, data: Partial<StudyPlan>) => Promise<StudyPlan>
     planDelete: (id: string) => Promise<boolean>
     subPlanList: (parentId: string) => Promise<StudyPlan[]>
@@ -163,8 +166,6 @@ export interface DreamAPI {
     taskUndone: (id: string, planId: string) => Promise<boolean>
     taskDelete: (id: string, planId: string) => Promise<boolean>
     checkinList: (planId: string, months?: number) => Promise<StudyCheckin[]>
-    checkinAdd: (planId: string, date: string, note?: string) => Promise<StudyCheckin>
-    checkinRemove: (planId: string, date: string) => Promise<boolean>
   }
   note: {
     list: (keyword?: string) => Promise<Note[]>
@@ -291,8 +292,6 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     taskUndone: (id: string, planId: string) => ipcRenderer.invoke('study:taskUndone', id, planId),
     taskDelete: (id: string, planId: string) => ipcRenderer.invoke('study:taskDelete', id, planId),
     checkinList: (planId: string, months?: number) => ipcRenderer.invoke('study:checkinList', planId, months),
-    checkinAdd: (planId: string, date: string, note?: string) => ipcRenderer.invoke('study:checkinAdd', planId, date, note),
-    checkinRemove: (planId: string, date: string) => ipcRenderer.invoke('study:checkinRemove', planId, date),
   },
   note: {
     list: (keyword?: string) => ipcRenderer.invoke('note:list', keyword),

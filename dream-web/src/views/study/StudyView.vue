@@ -31,6 +31,7 @@
           <div class="plan-info">
             <div class="plan-name-row">
               <span class="plan-name">{{ plan.title }}</span>
+              <span v-if="plan.checkin_enabled" class="checkin-badge" title="打卡计划">✓</span>
               <span class="plan-cat-badge" :style="{ background: catColorOf(plan.category) }">
                 {{ catIconOf(plan.category) }}
               </span>
@@ -56,7 +57,7 @@
       </div>
     </div>
 
-    <!-- ========== 中栏：选中计划详情 + 顶层任务 + 子计划列表 ========== -->
+    <!-- ========== 中栏：选中计划详情 + 打卡区 + 顶层任务 + 子计划列表 ========== -->
     <div class="plan-detail" :class="{ 'mobile-hidden': mobilePanel !== 'detail' }" v-if="store.currentPlan">
       <!-- 移动端返回 -->
       <el-button class="mobile-back" link @click="mobilePanel = 'list'">
@@ -78,6 +79,41 @@
       <!-- 进度环 -->
       <div class="progress-ring-wrap">
         <el-progress type="circle" :percentage="store.currentPlan.progress" :color="store.currentPlan.color" :width="100" />
+      </div>
+
+      <!-- ===== 打卡区（仅 checkin_enabled 时显示，位于任务清单上方）===== -->
+      <div v-if="store.currentPlan.checkin_enabled" class="task-section checkin-section">
+        <div class="section-header">
+          <div class="checkin-header-left">
+            <span class="section-label">打卡记录</span>
+            <span v-if="store.currentPlan.checkin_goal" class="checkin-goal-text">{{ store.currentPlan.checkin_goal }}</span>
+          </div>
+          <div class="checkin-stats">
+            <span class="streak-badge" v-if="store.streakDays() > 0">🔥 连续 {{ store.streakDays() }} 天</span>
+            <template v-if="store.currentPlan.checkin_target_days > 0">
+              <span class="target-badge">目标 {{ store.currentPlan.checkin_target_days }} 天</span>
+            </template>
+            <!-- 今日状态（只读，由任务全完成自动打卡） -->
+            <el-tag v-if="store.todayChecked()" type="success" size="small" effect="plain">今日已打卡 ✓</el-tag>
+            <el-tag v-else-if="store.tasks.length > 0" type="info" size="small" effect="plain">完成所有任务即打卡</el-tag>
+          </div>
+        </div>
+        <!-- 热力图：近 12 周 -->
+        <div class="checkin-heatmap">
+          <div v-for="week in checkinWeeks" :key="week.key" class="heatmap-col">
+            <div
+              v-for="cell in week.days" :key="cell.date"
+              class="heatmap-cell"
+              :class="{ checked: cell.checked, 'out-of-range': !cell.inRange }"
+              :style="cell.checked ? { background: store.currentPlan?.color, opacity: '0.85' } : {}"
+              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '')"
+            />
+          </div>
+        </div>
+        <div class="heatmap-legend">
+          <span class="legend-label">{{ checkinMonthLabel }}</span>
+          <span class="total-label">共 {{ store.checkins.length }} 次打卡</span>
+        </div>
       </div>
 
       <!-- 本计划任务 -->
@@ -110,42 +146,6 @@
             </el-button>
           </div>
           <el-empty v-if="store.tasks.length === 0" description="添加第一个任务" :image-size="40" />
-        </div>
-      </div>
-
-      <!-- 打卡区 -->
-      <div class="task-section checkin-section">
-        <div class="section-header">
-          <span class="section-label">打卡记录</span>
-          <div class="checkin-stats">
-            <span class="streak-badge" v-if="store.streakDays() > 0">🔥 连续 {{ store.streakDays() }} 天</span>
-            <el-button
-              v-if="!store.todayChecked()"
-              type="primary" size="small" round
-              @click="doCheckin"
-              :style="{ background: store.currentPlan?.color, borderColor: store.currentPlan?.color }"
-            >打卡</el-button>
-            <el-button
-              v-else size="small" round type="success" plain
-              @click="store.undoCheckin()"
-            >已打卡 ✓</el-button>
-          </div>
-        </div>
-        <!-- 热力图：近 12 周，每列 = 1 周 -->
-        <div class="checkin-heatmap">
-          <div v-for="week in checkinWeeks" :key="week.key" class="heatmap-col">
-            <div
-              v-for="cell in week.days" :key="cell.date"
-              class="heatmap-cell"
-              :class="{ checked: cell.checked, 'out-of-range': !cell.inRange }"
-              :style="cell.checked ? { background: store.currentPlan?.color, opacity: '0.85' } : {}"
-              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '')"
-            />
-          </div>
-        </div>
-        <div class="heatmap-legend">
-          <span class="legend-label">{{ checkinMonthLabel }}</span>
-          <span class="total-label">共 {{ store.checkins.length }} 次打卡</span>
         </div>
       </div>
 
@@ -253,12 +253,12 @@
     <!-- ========== 新建/编辑计划弹窗 ========== -->
     <el-dialog
       v-model="showPlanDialog"
-      :title="planDialogMode === 'add' ? '新建计划' : planDialogMode === 'edit' ? '编辑计划' : '新建子计划'"
+      :title="planDialogMode === 'add' ? '新建计划' : planDialogMode === 'edit' ? '编辑计划' : planDialogMode === 'sub' ? '新建子计划' : '编辑子计划'"
       width="480px"
     >
       <el-form :model="planForm" label-width="80px">
         <!-- 仅顶层计划可选类型 -->
-        <el-form-item label="计划类型" v-if="planDialogMode !== 'sub'">
+        <el-form-item label="计划类型" v-if="planDialogMode !== 'sub' && planDialogMode !== 'editSub'">
           <div class="cat-grid">
             <el-button
               v-for="cat in PLAN_CATEGORIES.filter(c => c.value !== 'all')" :key="cat.value"
@@ -272,10 +272,10 @@
           </div>
         </el-form-item>
         <el-form-item label="计划名称">
-          <el-input v-model="planForm.title" :placeholder="planDialogMode === 'sub' ? '子计划名称' : `${catLabelOf(planForm.category)}计划名称`" />
+          <el-input v-model="planForm.title" :placeholder="planDialogMode === 'sub' || planDialogMode === 'editSub' ? '子计划名称' : `${catLabelOf(planForm.category)}计划名称`" />
         </el-form-item>
-        <el-form-item label="目标描述">
-          <el-input v-model="planForm.goal" type="textarea" :rows="2" placeholder="目标描述（可选）" />
+        <el-form-item label="计划目标">
+          <el-input v-model="planForm.goal" type="textarea" :rows="2" placeholder="目标描述（可选，如：减重10斤、坚持锻炼）" />
         </el-form-item>
         <el-form-item label="详细描述">
           <el-input v-model="planForm.description" type="textarea" :rows="2" placeholder="详细描述（可选）" />
@@ -289,11 +289,33 @@
             />
           </div>
         </el-form-item>
+
+        <!-- 打卡模块：仅顶层计划 -->
+        <template v-if="planDialogMode !== 'sub' && planDialogMode !== 'editSub'">
+          <el-divider content-position="left"><span class="divider-label">打卡模块（可选）</span></el-divider>
+          <el-form-item label="启用打卡">
+            <el-switch v-model="planForm.checkin_enabled" />
+            <el-text size="small" type="info" style="margin-left:10px">当日任务全部完成自动打卡</el-text>
+          </el-form-item>
+          <template v-if="planForm.checkin_enabled">
+            <el-form-item label="打卡目标">
+              <el-input v-model="planForm.checkin_goal" placeholder="打卡目标（可选，如：减肥10斤）" />
+            </el-form-item>
+            <el-form-item label="目标天数">
+              <el-input-number
+                v-model="planForm.checkin_target_days"
+                :min="0" :max="365" :step="1"
+                style="width:140px"
+              />
+              <el-text size="small" type="info" style="margin-left:8px">天（0 = 不限制）</el-text>
+            </el-form-item>
+          </template>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="showPlanDialog = false">取消</el-button>
         <el-button type="primary" @click="submitPlanDialog" :disabled="!planForm.title.trim()">
-          {{ planDialogMode === 'edit' ? '保存' : '创建' }}
+          {{ planDialogMode === 'edit' || planDialogMode === 'editSub' ? '保存' : '创建' }}
         </el-button>
       </template>
     </el-dialog>
@@ -324,29 +346,26 @@ let editingPlanId = ''
 
 const planForm = reactive<{
   title: string; goal: string; description: string; category: PlanCategory; color: string
-}>({ title: '', goal: '', description: '', category: 'study', color: '#0071e3' })
+  checkin_enabled: boolean; checkin_goal: string; checkin_target_days: number
+}>({
+  title: '', goal: '', description: '', category: 'study', color: '#0071e3',
+  checkin_enabled: false, checkin_goal: '', checkin_target_days: 0,
+})
 
 onMounted(() => store.loadPlans())
 
 // ===== 打卡热力图 =====
 
-/** 近 12 周（84 天）按列（周）组织，每列 7 格（日-六） */
 const checkinWeeks = computed(() => {
   const checkedSet = new Set(store.checkins.map(c => c.date))
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-
-  // 找到本周日（周的起始）
   const startOfWeek = new Date(today)
   startOfWeek.setDate(today.getDate() - today.getDay())
-
-  // 往前推 11 周，共 12 周
   const firstSunday = new Date(startOfWeek)
   firstSunday.setDate(startOfWeek.getDate() - 11 * 7)
-
   const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean }[] }[] = []
   const cursor = new Date(firstSunday)
-
   for (let w = 0; w < 12; w++) {
     const days = []
     for (let d = 0; d < 7; d++) {
@@ -367,10 +386,6 @@ const checkinMonthLabel = computed(() => {
   return first.slice(0, 7).replace('-', '/') + ' – ' + last.slice(0, 7).replace('-', '/')
 })
 
-async function doCheckin() {
-  await store.checkin()
-}
-
 const currentCat = computed(() => PLAN_CATEGORIES.find(c => c.value === store.activeCategory)!)
 const currentCatLabel = computed(() => currentCat.value.label)
 const currentCatIcon = computed(() => currentCat.value.icon)
@@ -389,6 +404,7 @@ function openAddPlan() {
     title: '', goal: '', description: '',
     category: cat as PlanCategory,
     color: PLAN_CATEGORIES.find(c => c.value === cat)?.color ?? '#0071e3',
+    checkin_enabled: false, checkin_goal: '', checkin_target_days: 0,
   })
   showPlanDialog.value = true
 }
@@ -402,6 +418,9 @@ function openEditPlan(plan: StudyPlan) {
     description: plan.description ?? '',
     category: plan.category,
     color: plan.color,
+    checkin_enabled: !!plan.checkin_enabled,
+    checkin_goal: plan.checkin_goal ?? '',
+    checkin_target_days: plan.checkin_target_days ?? 0,
   })
   showPlanDialog.value = true
 }
@@ -416,6 +435,7 @@ function openAddSubPlan() {
     title: '', goal: '', description: '',
     category: store.currentPlan.category,
     color: store.currentPlan.color,
+    checkin_enabled: false, checkin_goal: '', checkin_target_days: 0,
   })
   showPlanDialog.value = true
 }
@@ -429,6 +449,7 @@ function openEditSubPlan(sub: StudyPlan) {
     description: sub.description ?? '',
     category: sub.category,
     color: sub.color,
+    checkin_enabled: false, checkin_goal: '', checkin_target_days: 0,
   })
   showPlanDialog.value = true
 }
@@ -437,12 +458,18 @@ function openEditSubPlan(sub: StudyPlan) {
 
 async function submitPlanDialog() {
   if (!planForm.title.trim()) return
+  const isTopLevel = planDialogMode.value === 'add' || planDialogMode.value === 'edit'
   const data = {
     title: planForm.title,
     goal: planForm.goal,
     description: planForm.description,
     category: planForm.category,
     color: planForm.color,
+    ...(isTopLevel ? {
+      checkin_enabled: planForm.checkin_enabled ? 1 : 0,
+      checkin_goal: planForm.checkin_goal,
+      checkin_target_days: planForm.checkin_target_days,
+    } : {}),
   }
   if (planDialogMode.value === 'add') {
     await store.addPlan(data)
@@ -517,6 +544,11 @@ async function addSubTask() {
 .plan-name-row { display: flex; align-items: center; gap: 6px; }
 .plan-name { font-size: 13px; font-weight: 600; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 .plan-cat-badge { width: 18px; height: 18px; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.checkin-badge {
+  font-size: 10px; font-weight: 700; color: #34c759;
+  border: 1px solid #34c759; border-radius: 3px;
+  padding: 0 3px; line-height: 15px; flex-shrink: 0;
+}
 .plan-card-actions { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 150ms; }
 .plan-card:hover .plan-card-actions { opacity: 1; }
 
@@ -577,10 +609,13 @@ async function addSubTask() {
   background: var(--color-bg);
 }
 
-/* ========== 打卡热力图 ========== */
+/* ========== 打卡区 ========== */
 .checkin-section { gap: 8px; }
-.checkin-stats { display: flex; align-items: center; gap: 8px; }
+.checkin-header-left { display: flex; flex-direction: column; gap: 2px; }
+.checkin-goal-text { font-size: 11px; color: var(--color-text-muted); }
+.checkin-stats { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .streak-badge { font-size: 12px; font-weight: 600; color: var(--color-text); white-space: nowrap; }
+.target-badge { font-size: 11px; color: var(--color-text-muted); white-space: nowrap; }
 
 .checkin-heatmap {
   display: flex; gap: 3px; overflow-x: auto;
@@ -591,8 +626,7 @@ async function addSubTask() {
   width: 13px; height: 13px; border-radius: 3px;
   background: var(--color-border);
   transition: background 150ms, transform 100ms;
-  cursor: default;
-  flex-shrink: 0;
+  cursor: default; flex-shrink: 0;
 }
 .heatmap-cell.checked { transform: scale(1.05); }
 .heatmap-cell.out-of-range { opacity: 0.2; }
@@ -609,6 +643,7 @@ async function addSubTask() {
 .color-dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; transition: transform 150ms; }
 .color-dot:hover { transform: scale(1.15); }
 .color-dot.selected { outline: 3px solid var(--color-text); outline-offset: 2px; }
+.divider-label { font-size: 12px; color: var(--color-text-muted); }
 
 /* ========== 移动端适配 ========== */
 .mobile-back { display: none; }
@@ -619,7 +654,6 @@ async function addSubTask() {
   .sub-detail { width: 100%; }
   .mobile-hidden { display: none !important; }
   .mobile-back { display: inline-flex; margin-bottom: 8px; font-size: 13px; }
-  /* 移动端悬停操作按钮常显 */
   .plan-card-actions { opacity: 1; }
   .sub-plan-actions { opacity: 1; }
 }

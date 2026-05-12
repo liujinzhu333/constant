@@ -72,6 +72,7 @@ export const useStudyStore = defineStore('study', () => {
   async function addPlan(data: {
     title: string; description?: string; goal?: string
     category?: PlanCategory; color?: string
+    checkin_enabled?: number; checkin_goal?: string; checkin_target_days?: number
   }) {
     const t = now()
     const plan = await offlinePost<StudyPlan>(
@@ -86,6 +87,9 @@ export const useStudyStore = defineStore('study', () => {
         created_at: t, updated_at: t,
         taskCount: 0, doneCount: 0, subPlanCount: 0,
         task_count: 0, done_count: 0, sub_plan_count: 0,
+        checkin_enabled: data.checkin_enabled ?? 0,
+        checkin_goal: data.checkin_goal ?? '',
+        checkin_target_days: data.checkin_target_days ?? 0,
       }),
     )
     plans.value.unshift({ ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 })
@@ -149,6 +153,7 @@ export const useStudyStore = defineStore('study', () => {
         created_at: t, updated_at: t,
         taskCount: 0, doneCount: 0, subPlanCount: 0,
         task_count: 0, done_count: 0, sub_plan_count: 0,
+        checkin_enabled: 0, checkin_goal: '', checkin_target_days: 0,
       }),
     )
     subPlans.value.push({ ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 })
@@ -202,7 +207,7 @@ export const useStudyStore = defineStore('study', () => {
     }
   }
 
-  // ==================== 打卡 ====================
+  // ==================== 打卡（只读，由任务完成自动触发） ====================
 
   async function loadCheckins(planId: string, months = 3) {
     checkinLoading.value = true
@@ -231,24 +236,6 @@ export const useStudyStore = defineStore('study', () => {
       d.setDate(d.getDate() - 1)
     }
     return streak
-  }
-
-  async function checkin(note = '') {
-    if (!currentPlan.value) return
-    const planId = currentPlan.value.id
-    const today = new Date().toISOString().slice(0, 10)
-    const record = await checkinApi.add(planId, today, note)
-    if (!checkins.value.some(c => c.date === today)) {
-      checkins.value.push(record)
-    }
-  }
-
-  async function undoCheckin() {
-    if (!currentPlan.value) return
-    const planId = currentPlan.value.id
-    const today = new Date().toISOString().slice(0, 10)
-    await checkinApi.remove(planId, today)
-    checkins.value = checkins.value.filter(c => c.date !== today)
   }
 
   // ==================== 任务 ====================
@@ -300,6 +287,11 @@ export const useStudyStore = defineStore('study', () => {
     const taskCachePath = `/api/study/tasks?plan_id=${planId}`
     const cached = readCache<StudyTask[]>(taskCachePath) ?? []
     writeCache(taskCachePath, cached.map(t => t.id === task.id ? { ...t, ...patch } : t))
+
+    // 若计划开启打卡，刷新打卡记录（服务端在 PATCH 时已自动打卡/撤卡）
+    if (currentPlan.value.checkin_enabled) {
+      checkins.value = await checkinApi.list(planId, 3)
+    }
   }
 
   async function deleteTask(id: string) {
@@ -409,6 +401,6 @@ export const useStudyStore = defineStore('study', () => {
     loadSubPlans, selectSubPlan, addSubPlan, updateSubPlan, deleteSubPlan,
     addTask, toggleTask, deleteTask,
     addSubTask, toggleSubTask, deleteSubTask,
-    loadCheckins, checkin, undoCheckin, todayChecked, streakDays,
+    loadCheckins, todayChecked, streakDays,
   }
 })

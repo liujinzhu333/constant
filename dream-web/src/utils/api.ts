@@ -275,6 +275,9 @@ export interface StudyPlan {
   progress: number
   color: string
   parent_id: string | null
+  checkin_enabled: number        // 0=关闭 1=开启
+  checkin_goal: string           // 打卡文字目标
+  checkin_target_days: number    // 连续打卡目标天数
   created_at: number
   updated_at: number
   // 聚合字段（服务端计算）
@@ -421,6 +424,7 @@ export const studyApi = {
   planAdd(data: {
     title: string; description?: string; goal?: string; category?: string
     start_date?: number; end_date?: number; color?: string; parent_id?: string
+    checkin_enabled?: number; checkin_goal?: string; checkin_target_days?: number
   }): Promise<StudyPlan> {
     return http.post('/api/study/plans', data)
   },
@@ -452,12 +456,6 @@ export const studyApi = {
 export const checkinApi = {
   list(planId: string, months = 3): Promise<StudyCheckin[]> {
     return http.get(`/api/study/checkins?plan_id=${planId}&months=${months}`)
-  },
-  add(planId: string, date: string, note = ''): Promise<StudyCheckin> {
-    return http.post('/api/study/checkins', { plan_id: planId, date, note })
-  },
-  remove(planId: string, date: string): Promise<{ ok: boolean }> {
-    return http.delete(`/api/study/checkins/${planId}/${date}`)
   },
 }
 

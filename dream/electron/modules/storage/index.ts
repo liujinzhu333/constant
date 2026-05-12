@@ -135,18 +135,21 @@ export class StorageManager {
 
         -- ===================== 业务包：计划 =====================
         CREATE TABLE IF NOT EXISTS study_plans (
-          id          TEXT PRIMARY KEY,
-          title       TEXT NOT NULL,
-          description TEXT DEFAULT '',
-          goal        TEXT DEFAULT '',
-          category    TEXT NOT NULL DEFAULT 'study', -- study|work|life|fitness|finance
-          status      TEXT NOT NULL DEFAULT 'active', -- active | paused | done
-          start_date  INTEGER,
-          end_date    INTEGER,
-          progress    INTEGER DEFAULT 0,
-          color       TEXT DEFAULT '#0071e3',
-          created_at  INTEGER DEFAULT (strftime('%s', 'now')),
-          updated_at  INTEGER DEFAULT (strftime('%s', 'now'))
+          id                  TEXT PRIMARY KEY,
+          title               TEXT NOT NULL,
+          description         TEXT DEFAULT '',
+          goal                TEXT DEFAULT '',
+          category            TEXT NOT NULL DEFAULT 'study', -- study|work|life|fitness|finance
+          status              TEXT NOT NULL DEFAULT 'active', -- active | paused | done
+          start_date          INTEGER,
+          end_date            INTEGER,
+          progress            INTEGER DEFAULT 0,
+          color               TEXT DEFAULT '#0071e3',
+          checkin_enabled     INTEGER NOT NULL DEFAULT 0,     -- 0=关闭 1=开启打卡
+          checkin_goal        TEXT DEFAULT '',                -- 打卡文字目标（可选）
+          checkin_target_days INTEGER DEFAULT 0,             -- 连续打卡目标天数（0=不设置）
+          created_at          INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at          INTEGER DEFAULT (strftime('%s', 'now'))
         );
 
         CREATE TABLE IF NOT EXISTS study_tasks (
@@ -246,6 +249,16 @@ export class StorageManager {
       // 子计划支持：parent_id 为空表示顶层计划
       if (!cols.includes('parent_id')) {
         this.db!.exec("ALTER TABLE study_plans ADD COLUMN parent_id TEXT REFERENCES study_plans(id) ON DELETE CASCADE")
+      }
+      // 打卡模块字段
+      if (!cols.includes('checkin_enabled')) {
+        this.db!.exec("ALTER TABLE study_plans ADD COLUMN checkin_enabled INTEGER NOT NULL DEFAULT 0")
+      }
+      if (!cols.includes('checkin_goal')) {
+        this.db!.exec("ALTER TABLE study_plans ADD COLUMN checkin_goal TEXT DEFAULT ''")
+      }
+      if (!cols.includes('checkin_target_days')) {
+        this.db!.exec("ALTER TABLE study_plans ADD COLUMN checkin_target_days INTEGER DEFAULT 0")
       }
 
       // 数据迁移：accounts 表新增 category 字段

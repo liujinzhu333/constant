@@ -119,24 +119,31 @@ export class BusinessIpc {
     ipcMain.handle('study:planAdd', (_e, data: {
       title: string; description?: string; goal?: string; category?: string
       start_date?: number; end_date?: number; color?: string; parent_id?: string
+      checkin_enabled?: number; checkin_goal?: string; checkin_target_days?: number
     }) => {
       const id = uuid()
       this.db.prepare(`
-        INSERT INTO study_plans (id, title, description, goal, category, start_date, end_date, color, parent_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO study_plans (id, title, description, goal, category, start_date, end_date, color, parent_id, checkin_enabled, checkin_goal, checkin_target_days, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, data.title, data.description ?? '', data.goal ?? '',
         data.category ?? 'study',
         data.start_date ?? null, data.end_date ?? null, data.color ?? '#0071e3',
-        data.parent_id ?? null, now(), now())
+        data.parent_id ?? null,
+        data.checkin_enabled ?? 0, data.checkin_goal ?? '', data.checkin_target_days ?? 0,
+        now(), now())
       const plan = this.db.prepare('SELECT * FROM study_plans WHERE id = ?').get(id) as Record<string, unknown>
       return { ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 }
     })
 
     ipcMain.handle('study:planUpdate', (_e, id: string, data: Partial<{
-      title: string; description: string; goal: string; category: string; status: string; start_date: number; end_date: number; color: string; progress: number
+      title: string; description: string; goal: string; category: string; status: string
+      start_date: number; end_date: number; color: string; progress: number
+      checkin_enabled: number; checkin_goal: string; checkin_target_days: number
     }>) => {
-      const fields = Object.keys(data).map(k => `${k} = ?`).join(', ')
-      const vals = Object.values(data)
+      const ALLOWED = ['title','description','goal','category','status','start_date','end_date','color','progress','checkin_enabled','checkin_goal','checkin_target_days']
+      const safe = Object.fromEntries(Object.entries(data).filter(([k]) => ALLOWED.includes(k)))
+      const fields = Object.keys(safe).map(k => `${k} = ?`).join(', ')
+      const vals = Object.values(safe)
       if (!fields) return null
       this.db.prepare(`UPDATE study_plans SET ${fields}, updated_at = ? WHERE id = ?`).run(...vals, now(), id)
       return this.db.prepare('SELECT * FROM study_plans WHERE id = ?').get(id)
@@ -165,12 +172,15 @@ export class BusinessIpc {
     ipcMain.handle('study:taskDone', (_e, id: string, planId: string) => {
       this.db.prepare(`UPDATE study_tasks SET status = 'done', updated_at = ? WHERE id = ?`).run(now(), id)
       this.syncPlanProgress(planId)
+      this.tryAutoCheckin(planId)
       return true
     })
 
     ipcMain.handle('study:taskUndone', (_e, id: string, planId: string) => {
       this.db.prepare(`UPDATE study_tasks SET status = 'todo', updated_at = ? WHERE id = ?`).run(now(), id)
       this.syncPlanProgress(planId)
+      // 当日任务不再全部完成，移除今日自动打卡
+      this.tryRemoveAutoCheckin(planId)
       return true
     })
 
@@ -188,6 +198,36 @@ export class BusinessIpc {
     this.db.prepare('UPDATE study_plans SET progress = ?, updated_at = ? WHERE id = ?').run(progress, now(), planId)
   }
 
+  /** 若计划开启打卡且当日任务全部完成，自动写入打卡记录 */
+  private tryAutoCheckin(planId: string) {
+    const plan = this.db.prepare('SELECT checkin_enabled FROM study_plans WHERE id = ?').get(planId) as { checkin_enabled: number } | undefined
+    if (!plan || !plan.checkin_enabled) return
+
+    const total = (this.db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ?').get(planId) as { c: number }).c
+    if (total === 0) return // 没有任务时不自动打卡
+
+    const todo = (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'todo'").get(planId) as { c: number }).c
+    if (todo > 0) return // 还有未完成任务
+
+    const today = new Date().toISOString().slice(0, 10)
+    const exists = this.db.prepare('SELECT id FROM study_checkins WHERE plan_id = ? AND date = ?').get(planId, today)
+    if (exists) return // 今日已打卡
+
+    const id = uuid()
+    try {
+      this.db.prepare('INSERT INTO study_checkins (id, plan_id, date, note, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, planId, today, '', now())
+    } catch { /* UNIQUE 冲突忽略 */ }
+  }
+
+  /** 若计划开启打卡但当日任务不再全部完成，移除今日自动打卡 */
+  private tryRemoveAutoCheckin(planId: string) {
+    const plan = this.db.prepare('SELECT checkin_enabled FROM study_plans WHERE id = ?').get(planId) as { checkin_enabled: number } | undefined
+    if (!plan || !plan.checkin_enabled) return
+    const today = new Date().toISOString().slice(0, 10)
+    this.db.prepare('DELETE FROM study_checkins WHERE plan_id = ? AND date = ?').run(planId, today)
+  }
+
   // ===================== 打卡 =====================
   private registerCheckin() {
     // 查询近 N 个月的打卡记录
@@ -198,25 +238,6 @@ export class BusinessIpc {
       return this.db.prepare(
         'SELECT * FROM study_checkins WHERE plan_id = ? AND date >= ? ORDER BY date ASC'
       ).all(planId, sinceStr)
-    })
-
-    // 打卡（幂等：同一天重复打卡返回已有记录）
-    ipcMain.handle('study:checkinAdd', (_e, planId: string, date: string, note = '') => {
-      const id = uuid()
-      try {
-        this.db.prepare(
-          'INSERT INTO study_checkins (id, plan_id, date, note, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run(id, planId, date, note, now())
-        return this.db.prepare('SELECT * FROM study_checkins WHERE id = ?').get(id)
-      } catch {
-        return this.db.prepare('SELECT * FROM study_checkins WHERE plan_id = ? AND date = ?').get(planId, date)
-      }
-    })
-
-    // 撤销打卡
-    ipcMain.handle('study:checkinRemove', (_e, planId: string, date: string) => {
-      this.db.prepare('DELETE FROM study_checkins WHERE plan_id = ? AND date = ?').run(planId, date)
-      return true
     })
   }
 

@@ -71,6 +71,7 @@ export const useStudyStore = defineStore('study', () => {
   async function addPlan(data: {
     title: string; description?: string; goal?: string
     category?: PlanCategory; color?: string
+    checkin_enabled?: number; checkin_goal?: string; checkin_target_days?: number
   }) {
     const plan = await window.dreamAPI.study.planAdd(data)
     plans.value.unshift({ ...plan, taskCount: 0, doneCount: 0, subPlanCount: 0 })
@@ -166,14 +167,20 @@ export const useStudyStore = defineStore('study', () => {
 
   async function toggleTask(task: StudyTask) {
     if (!currentPlan.value) return
+    const planId = currentPlan.value.id
+    const idx = tasks.value.findIndex(t => t.id === task.id)
     if (task.status === 'todo') {
-      await window.dreamAPI.study.taskDone(task.id, currentPlan.value.id)
-      task.status = 'done'
+      await window.dreamAPI.study.taskDone(task.id, planId)
+      if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], status: 'done' }
     } else {
-      await window.dreamAPI.study.taskUndone(task.id, currentPlan.value.id)
-      task.status = 'todo'
+      await window.dreamAPI.study.taskUndone(task.id, planId)
+      if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], status: 'todo' }
     }
     syncProgress('top')
+    // 若计划开启打卡，刷新打卡记录（服务端已自动打卡/撤卡）
+    if (currentPlan.value.checkin_enabled) {
+      checkins.value = await window.dreamAPI.study.checkinList(planId, 3)
+    }
   }
 
   async function deleteTask(id: string) {
@@ -237,7 +244,7 @@ export const useStudyStore = defineStore('study', () => {
     }
   }
 
-  // ==================== 打卡 ====================
+  // ==================== 打卡（只读，由任务完成自动触发） ====================
 
   async function loadCheckins(planId: string, months = 3) {
     checkinLoading.value = true
@@ -268,24 +275,6 @@ export const useStudyStore = defineStore('study', () => {
     return streak
   }
 
-  async function checkin(note = '') {
-    if (!currentPlan.value) return
-    const planId = currentPlan.value.id
-    const today = new Date().toISOString().slice(0, 10)
-    const record = await window.dreamAPI.study.checkinAdd(planId, today, note)
-    if (!checkins.value.some(c => c.date === today)) {
-      checkins.value.push(record)
-    }
-  }
-
-  async function undoCheckin() {
-    if (!currentPlan.value) return
-    const planId = currentPlan.value.id
-    const today = new Date().toISOString().slice(0, 10)
-    await window.dreamAPI.study.checkinRemove(planId, today)
-    checkins.value = checkins.value.filter(c => c.date !== today)
-  }
-
   return {
     plans, currentPlan, tasks, loading, activeCategory,
     subPlans, currentSubPlan, subTasks, subPlansLoading,
@@ -295,6 +284,6 @@ export const useStudyStore = defineStore('study', () => {
     loadSubPlans, selectSubPlan, addSubPlan, updateSubPlan, deleteSubPlan,
     addTask, toggleTask, deleteTask,
     addSubTask, toggleSubTask, deleteSubTask,
-    loadCheckins, checkin, undoCheckin, todayChecked, streakDays,
+    loadCheckins, todayChecked, streakDays,
   }
 })

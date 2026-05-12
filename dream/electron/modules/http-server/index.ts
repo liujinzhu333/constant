@@ -359,11 +359,13 @@ export class LocalHttpServer {
     // POST /api/study/plans
     if ((m = matchRoute(method, url, '/api/study/plans', 'POST')).matched) {
       const d = await readBody(req); const id = uuid(); const t = now()
-      db.prepare(`INSERT INTO study_plans (id,title,description,goal,category,status,start_date,end_date,progress,color,parent_id,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      db.prepare(`INSERT INTO study_plans (id,title,description,goal,category,status,start_date,end_date,progress,color,parent_id,checkin_enabled,checkin_goal,checkin_target_days,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(id, d.title, d.description??'', d.goal??'', d.category??'study',
           d.status??'active', d.start_date??null, d.end_date??null, d.progress??0,
-          d.color??'#0071e3', d.parent_id??null, t, t)
+          d.color??'#0071e3', d.parent_id??null,
+          d.checkin_enabled??0, d.checkin_goal??'', d.checkin_target_days??0,
+          t, t)
       const plan = db.prepare('SELECT * FROM study_plans WHERE id=?').get(id) as any
       return json(res, 201, { ...plan, task_count:0, done_count:0, sub_plan_count:0 })
     }
@@ -371,7 +373,7 @@ export class LocalHttpServer {
     // PATCH /api/study/plans/:id
     if ((m = matchRoute(method, url, '/api/study/plans/:id', 'PATCH')).matched) {
       const d = await readBody(req)
-      const allowed = ['title','description','goal','category','status','start_date','end_date','progress','color']
+      const allowed = ['title','description','goal','category','status','start_date','end_date','progress','color','checkin_enabled','checkin_goal','checkin_target_days']
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
@@ -417,7 +419,17 @@ export class LocalHttpServer {
           .run(...Object.values(safe), now(), m.params.id)
       }
       const task = db.prepare('SELECT * FROM study_tasks WHERE id=?').get(m.params.id) as any
-      if (task) this.syncPlanProgress(db, task.plan_id)
+      if (task) {
+        this.syncPlanProgress(db, task.plan_id)
+        // 状态变更时尝试自动打卡 / 撤销打卡
+        if ('status' in safe) {
+          if ((safe as any).status === 'done') {
+            this.tryAutoCheckin(db, task.plan_id)
+          } else {
+            this.tryRemoveAutoCheckin(db, task.plan_id)
+          }
+        }
+      }
       return json(res, 200, task)
     }
 
@@ -425,7 +437,10 @@ export class LocalHttpServer {
     if ((m = matchRoute(method, url, '/api/study/tasks/:id', 'DELETE')).matched) {
       const task = db.prepare('SELECT plan_id FROM study_tasks WHERE id=?').get(m.params.id) as any
       db.prepare('DELETE FROM study_tasks WHERE id=?').run(m.params.id)
-      if (task) this.syncPlanProgress(db, task.plan_id)
+      if (task) {
+        this.syncPlanProgress(db, task.plan_id)
+        this.tryRemoveAutoCheckin(db, task.plan_id) // 删除任务后可能不再满足全完成
+      }
       return json(res, 200, { ok: true })
     }
 
@@ -441,28 +456,6 @@ export class LocalHttpServer {
       return json(res, 200,
         db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date>=? ORDER BY date ASC')
           .all(query.plan_id, sinceStr))
-    }
-
-    // POST /api/study/checkins  { plan_id, date, note? }
-    if ((m = matchRoute(method, url, '/api/study/checkins', 'POST')).matched) {
-      const d = await readBody(req)
-      if (!d.plan_id || !d.date) return json(res, 400, { error: 'plan_id and date required' })
-      const id = uuid(); const t = now()
-      try {
-        db.prepare('INSERT INTO study_checkins (id,plan_id,date,note,created_at) VALUES (?,?,?,?,?)')
-          .run(id, d.plan_id, d.date, d.note ?? '', t)
-        return json(res, 201, db.prepare('SELECT * FROM study_checkins WHERE id=?').get(id))
-      } catch {
-        // UNIQUE 冲突：已打卡，返回已有记录
-        const existing = db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date=?').get(d.plan_id, d.date)
-        return json(res, 200, existing)
-      }
-    }
-
-    // DELETE /api/study/checkins/:planId/:date
-    if ((m = matchRoute(method, url, '/api/study/checkins/:planId/:date', 'DELETE')).matched) {
-      db.prepare('DELETE FROM study_checkins WHERE plan_id=? AND date=?').run(m.params.planId, m.params.date)
-      return json(res, 200, { ok: true })
     }
 
     // ═══════════════ NOTES ════════════════════════════════════
@@ -688,5 +681,28 @@ export class LocalHttpServer {
     const done  = (db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND status='done'").get(planId) as any).c
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
     db.prepare('UPDATE study_plans SET progress=?,updated_at=? WHERE id=?').run(progress, now(), planId)
+  }
+
+  private tryAutoCheckin(db: ReturnType<StorageManager['getDb']>, planId: string) {
+    const plan = db.prepare('SELECT checkin_enabled FROM study_plans WHERE id=?').get(planId) as any
+    if (!plan?.checkin_enabled) return
+    const total = (db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=?').get(planId) as any).c
+    if (total === 0) return
+    const todo = (db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND status='todo'").get(planId) as any).c
+    if (todo > 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    const exists = db.prepare('SELECT id FROM study_checkins WHERE plan_id=? AND date=?').get(planId, today)
+    if (exists) return
+    try {
+      db.prepare('INSERT INTO study_checkins (id,plan_id,date,note,created_at) VALUES (?,?,?,?,?)')
+        .run(randomUUID(), planId, today, '', now())
+    } catch { /* UNIQUE 冲突忽略 */ }
+  }
+
+  private tryRemoveAutoCheckin(db: ReturnType<StorageManager['getDb']>, planId: string) {
+    const plan = db.prepare('SELECT checkin_enabled FROM study_plans WHERE id=?').get(planId) as any
+    if (!plan?.checkin_enabled) return
+    const today = new Date().toISOString().slice(0, 10)
+    db.prepare('DELETE FROM study_checkins WHERE plan_id=? AND date=?').run(planId, today)
   }
 }
