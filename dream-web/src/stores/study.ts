@@ -288,9 +288,21 @@ export const useStudyStore = defineStore('study', () => {
     const cached = readCache<StudyTask[]>(taskCachePath) ?? []
     writeCache(taskCachePath, cached.map(t => t.id === task.id ? { ...t, ...patch } : t))
 
-    // 若计划开启打卡，刷新打卡记录（服务端在 PATCH 时已自动打卡/撤卡）
+    // 若计划开启打卡，在本地直接判断是否需要自动打卡/撤卡
+    // 离线时后端不会执行 tryAutoCheckin，需前端自己维护 checkins
     if (currentPlan.value.checkin_enabled) {
-      checkins.value = await checkinApi.list(planId, 3)
+      const today = new Date().toISOString().slice(0, 10)
+      const allDone = tasks.value.length > 0 && tasks.value.every(t => t.status === 'done')
+      const alreadyChecked = checkins.value.some(c => c.date === today)
+      if (allDone && !alreadyChecked) {
+        // 全部完成 → 本地插入今日打卡记录
+        checkins.value = [...checkins.value, { id: `local_${today}`, plan_id: planId, date: today, note: '', created_at: Math.floor(Date.now() / 1000) }]
+      } else if (!allDone && alreadyChecked) {
+        // 不再全部完成 → 移除今日打卡记录
+        checkins.value = checkins.value.filter(c => c.date !== today)
+      }
+      // 在线时额外从服务端同步一次（服务端 tryAutoCheckin 已写入真实记录）
+      checkinApi.list(planId, 3).then(list => { checkins.value = list }).catch(() => {/* 离线时忽略 */})
     }
   }
 
