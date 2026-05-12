@@ -26,6 +26,7 @@ export class BusinessIpc {
     this.logger = Logger.getInstance()
     this.registerTodo()
     this.registerStudy()
+    this.registerCheckin()
     this.registerNote()
     this.registerSchedule()
     this.registerReminder()
@@ -185,6 +186,38 @@ export class BusinessIpc {
     const done = (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'done'").get(planId) as { c: number }).c
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
     this.db.prepare('UPDATE study_plans SET progress = ?, updated_at = ? WHERE id = ?').run(progress, now(), planId)
+  }
+
+  // ===================== 打卡 =====================
+  private registerCheckin() {
+    // 查询近 N 个月的打卡记录
+    ipcMain.handle('study:checkinList', (_e, planId: string, months = 3) => {
+      const since = new Date()
+      since.setMonth(since.getMonth() - Math.min(months, 12))
+      const sinceStr = since.toISOString().slice(0, 10)
+      return this.db.prepare(
+        'SELECT * FROM study_checkins WHERE plan_id = ? AND date >= ? ORDER BY date ASC'
+      ).all(planId, sinceStr)
+    })
+
+    // 打卡（幂等：同一天重复打卡返回已有记录）
+    ipcMain.handle('study:checkinAdd', (_e, planId: string, date: string, note = '') => {
+      const id = uuid()
+      try {
+        this.db.prepare(
+          'INSERT INTO study_checkins (id, plan_id, date, note, created_at) VALUES (?, ?, ?, ?, ?)'
+        ).run(id, planId, date, note, now())
+        return this.db.prepare('SELECT * FROM study_checkins WHERE id = ?').get(id)
+      } catch {
+        return this.db.prepare('SELECT * FROM study_checkins WHERE plan_id = ? AND date = ?').get(planId, date)
+      }
+    })
+
+    // 撤销打卡
+    ipcMain.handle('study:checkinRemove', (_e, planId: string, date: string) => {
+      this.db.prepare('DELETE FROM study_checkins WHERE plan_id = ? AND date = ?').run(planId, date)
+      return true
+    })
   }
 
   // ===================== 笔记 =====================

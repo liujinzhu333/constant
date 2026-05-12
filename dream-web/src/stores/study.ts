@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { studyApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, type StudyPlan, type StudyTask, type PlanCategory } from '../utils/api'
+import { studyApi, checkinApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, type StudyPlan, type StudyTask, type StudyCheckin, type PlanCategory } from '../utils/api'
 import { useConnectionStore } from './connection'
 
-export type { StudyPlan, StudyTask, PlanCategory }
+export type { StudyPlan, StudyTask, StudyCheckin, PlanCategory }
 
 export const PLAN_CATEGORIES: { value: PlanCategory | 'all'; label: string; icon: string; color: string }[] = [
   { value: 'all',     label: '全部',   icon: '🗂',  color: '#8e8e93' },
@@ -27,6 +27,10 @@ export const useStudyStore = defineStore('study', () => {
   const currentSubPlan = ref<StudyPlan | null>(null)
   const subTasks = ref<StudyTask[]>([])
   const subPlansLoading = ref(false)
+
+  // 打卡
+  const checkins = ref<StudyCheckin[]>([])
+  const checkinLoading = ref(false)
 
   // ==================== 顶层计划 ====================
 
@@ -55,12 +59,14 @@ export const useStudyStore = defineStore('study', () => {
     currentPlan.value = plan
     currentSubPlan.value = null
     subTasks.value = []
-    const [t, s] = await Promise.all([
+    const [t, s, c] = await Promise.all([
       studyApi.taskList(plan.id),
       studyApi.subPlanList(plan.id),
+      checkinApi.list(plan.id, 3),
     ])
     tasks.value = t
     subPlans.value = s
+    checkins.value = c
   }
 
   async function addPlan(data: {
@@ -194,6 +200,55 @@ export const useStudyStore = defineStore('study', () => {
       if (idx !== -1 && (plans.value[idx].subPlanCount ?? 0) > 0)
         plans.value[idx].subPlanCount = (plans.value[idx].subPlanCount ?? 1) - 1
     }
+  }
+
+  // ==================== 打卡 ====================
+
+  async function loadCheckins(planId: string, months = 3) {
+    checkinLoading.value = true
+    try {
+      checkins.value = await checkinApi.list(planId, months)
+    } finally {
+      checkinLoading.value = false
+    }
+  }
+
+  /** 今日是否已打卡 */
+  function todayChecked(): boolean {
+    const today = new Date().toISOString().slice(0, 10)
+    return checkins.value.some(c => c.date === today)
+  }
+
+  /** 连续打卡天数（从今天往前数连续的天数） */
+  function streakDays(): number {
+    const set = new Set(checkins.value.map(c => c.date))
+    let streak = 0
+    const d = new Date()
+    while (true) {
+      const key = d.toISOString().slice(0, 10)
+      if (!set.has(key)) break
+      streak++
+      d.setDate(d.getDate() - 1)
+    }
+    return streak
+  }
+
+  async function checkin(note = '') {
+    if (!currentPlan.value) return
+    const planId = currentPlan.value.id
+    const today = new Date().toISOString().slice(0, 10)
+    const record = await checkinApi.add(planId, today, note)
+    if (!checkins.value.some(c => c.date === today)) {
+      checkins.value.push(record)
+    }
+  }
+
+  async function undoCheckin() {
+    if (!currentPlan.value) return
+    const planId = currentPlan.value.id
+    const today = new Date().toISOString().slice(0, 10)
+    await checkinApi.remove(planId, today)
+    checkins.value = checkins.value.filter(c => c.date !== today)
   }
 
   // ==================== 任务 ====================
@@ -348,10 +403,12 @@ export const useStudyStore = defineStore('study', () => {
   return {
     plans, currentPlan, tasks, loading, activeCategory,
     subPlans, currentSubPlan, subTasks, subPlansLoading,
+    checkins, checkinLoading,
     loadPlans, selectCategory, selectPlan,
     addPlan, updatePlan, deletePlan,
     loadSubPlans, selectSubPlan, addSubPlan, updateSubPlan, deleteSubPlan,
     addTask, toggleTask, deleteTask,
     addSubTask, toggleSubTask, deleteSubTask,
+    loadCheckins, checkin, undoCheckin, todayChecked, streakDays,
   }
 })

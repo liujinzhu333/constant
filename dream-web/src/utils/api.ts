@@ -2,10 +2,15 @@
  * Dream Web — HTTP API 层
  *
  * 替代 window.dreamAPI（Electron IPC），所有数据请求通过 axios 走 HTTP Server。
- * 开发时由 vite proxy 转发到 localhost:45678；生产时直接请求同源。
+ * 开发时由 vite proxy 转发到 localhost:45679；生产时直接请求同源。
+ *
+ * 缓存策略：
+ *  - GET 请求成功后将结果写入 localStorage（key: dream_cache_<path>）
+ *  - 离线时 GET 请求自动降级读取缓存，写操作抛出 ApiOfflineError
  */
 
 import axios from 'axios'
+import { enqueue, genTempId } from './offline-queue'
 
 // ─── 错误类型 ─────────────────────────────────────────────────────
 
@@ -19,26 +24,225 @@ export class ApiError extends Error {
   }
 }
 
+// ─── 缓存工具 ─────────────────────────────────────────────────────
+
+const CACHE_PREFIX = 'dream_cache_'
+
+function cacheKey(path: string) {
+  // 保留查询参数，确保不同参数的请求使用不同缓存 key
+  // 例如 /api/study/plans?parent_id=null 与 /api/study/plans?parent_id=abc 互不干扰
+  return CACHE_PREFIX + path.replace(/\//g, '_').replace(/[?&=]/g, '-')
+}
+
+export function writeCache(path: string, data: unknown) {
+  try {
+    localStorage.setItem(cacheKey(path), JSON.stringify(data))
+  } catch { /* 存储满时静默忽略 */ }
+}
+
+export function readCache<T>(path: string): T | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(path))
+    return raw ? JSON.parse(raw) as T : null
+  } catch { return null }
+}
+
+// ─── 离线状态（轻量标志，避免循环依赖 pinia store） ────────────────
+
+let _offline = false
+export function setApiOffline(v: boolean) { _offline = v }
+export function isApiOffline() { return _offline }
+
 // ─── axios 实例 ───────────────────────────────────────────────────
+
+const API_BASE_KEY = 'dream_api_base'
 
 const instance = axios.create({
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 })
 
+/**
+ * 设置 API baseURL（云端访问本地 PC 时使用）。
+ * 传空字符串则恢复相对路径（开发 vite proxy 模式）。
+ */
+export function setApiBase(base: string) {
+  instance.defaults.baseURL = base || undefined
+}
+
+/** 供 offline-queue 等工具使用，复用同一个配了 baseURL 的 axios 实例 */
+export function getAxiosInstance() {
+  return instance
+}
+
+// 初始化时从 localStorage 读取已保存的 base（页面刷新后自动恢复）
+;(function initApiBase() {
+  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(API_BASE_KEY) : null
+  if (saved) instance.defaults.baseURL = saved
+})()
+
+/** 判断是否属于"服务不可达"类错误（网络断开 / vite proxy 502~504） */
+function isOfflineError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { response?: { status?: number } }
+  if (!e.response) return true   // 网络层错误（ECONNREFUSED 等）
+  const s = e.response.status
+  return s === 502 || s === 503 || s === 504  // proxy 无法连接后端
+}
+
 instance.interceptors.response.use(
   res => res.data,
   err => {
-    if (!err.response) throw new ApiOfflineError()
+    if (isOfflineError(err)) throw new ApiOfflineError()
     throw new ApiError(err.response.status, err.response.data?.error ?? err.message)
   }
 )
 
 const http = {
-  get:    <T>(path: string)                => instance.get<T, T>(path),
-  post:   <T>(path: string, body: unknown) => instance.post<T, T>(path, body),
-  patch:  <T>(path: string, body: unknown) => instance.patch<T, T>(path, body),
-  delete: <T>(path: string)                => instance.delete<T, T>(path),
+  get<T>(path: string): Promise<T> {
+    if (_offline) {
+      const cached = readCache<T>(path)
+      // 有缓存直接返回，没有缓存返回空数组（兜底），不抛错
+      return Promise.resolve(cached ?? ([] as unknown as T))
+    }
+    return instance.get<T, T>(path).then(data => {
+      writeCache(path, data)
+      return data
+    }).catch(err => {
+      // 在线状态下请求失败（服务关闭/proxy 502-503）→ 自动切换离线，读缓存
+      if (err instanceof ApiOfflineError) {
+        _offline = true
+        const cached = readCache<T>(path)
+        return cached ?? ([] as unknown as T)
+      }
+      throw err
+    })
+  },
+  post<T>(path: string, body: unknown): Promise<T> {
+    return instance.post<T, T>(path, body)
+  },
+  patch<T>(path: string, body: unknown): Promise<T> {
+    return instance.patch<T, T>(path, body)
+  },
+  delete<T>(path: string): Promise<T> {
+    return instance.delete<T, T>(path)
+  },
+}
+
+// ─── 离线缓存列表更新工具 ─────────────────────────────────────────
+//
+// 离线写操作完成后，同步更新对应 GET 路径的 localStorage 缓存，
+// 这样刷新页面后 load() 走离线路径时能读到最新数据。
+
+/** 从 PATCH/DELETE 路径中提取列表路径，如 /api/todos/123 → /api/todos */
+function listPathOf(itemPath: string): string {
+  return itemPath.replace(/\/[^/]+$/, '')
+}
+
+/** 离线 POST 后，将新条目插入缓存列表头部 */
+function cacheInsert<T extends { id: string }>(listPath: string, item: T) {
+  const list = readCache<T[]>(listPath) ?? []
+  writeCache(listPath, [item, ...list])
+}
+
+/** 离线 PATCH 后，用合并结果替换缓存列表中对应条目 */
+function cacheUpdate<T extends { id: string }>(listPath: string, updated: T) {
+  const list = readCache<T[]>(listPath) ?? []
+  writeCache(listPath, list.map(i => i.id === updated.id ? updated : i))
+}
+
+/** 离线 DELETE 后，从缓存列表中删除对应条目 */
+function cacheRemove(listPath: string, id: string) {
+  const list = readCache<{ id: string }[]>(listPath) ?? []
+  writeCache(listPath, list.filter(i => i.id !== id))
+}
+
+/** 从 item 路径末尾提取 id，如 /api/todos/offline_xxx → offline_xxx */
+function idFromPath(itemPath: string): string {
+  return itemPath.split('/').pop() ?? ''
+}
+
+// ─── 离线感知写操作（供 store 使用） ──────────────────────────────
+//
+// offlinePost：离线时（或请求失败时）入队并返回含 tempId 的占位对象，在线时正常请求
+// offlinePatch：离线时（或请求失败时）入队，返回合并后的对象
+// offlineDelete：离线时（或请求失败时）入队，返回 { ok: true }
+//
+// 注意：若当前标记为在线但网络不通（ApiOfflineError），会自动切换离线并入队，
+// 而不是向上层抛出异常。这样 store 层无需额外 try-catch。
+// 离线时同步更新 localStorage 缓存，刷新页面后 load() 仍能读到最新数据。
+
+function _doOfflinePost<T extends object & { id: string }>(
+  path: string,
+  body: Record<string, unknown>,
+  makeLocal: (tempId: string) => T,
+  switchOffline = false,
+): T & { _offline: true } {
+  if (switchOffline) _offline = true
+  const tempId = genTempId()
+  const local = makeLocal(tempId)
+  enqueue({ method: 'POST', path, body: { ...body, _tempId: tempId }, tempId })
+  cacheInsert(path, local)   // 写入 GET 缓存，刷新后可读到
+  return { ...local, _offline: true as const }
+}
+
+export function offlinePost<T extends object & { id: string }>(
+  path: string,
+  body: Record<string, unknown>,
+  /** 构造离线占位对象（含 tempId）的工厂函数 */
+  makeLocal: (tempId: string) => T,
+): Promise<T & { _offline?: boolean }> {
+  if (_offline) {
+    return Promise.resolve(_doOfflinePost(path, body, makeLocal))
+  }
+  return http.post<T>(path, body).catch(err => {
+    if (err instanceof ApiOfflineError) {
+      return _doOfflinePost(path, body, makeLocal, true)
+    }
+    throw err
+  })
+}
+
+export function offlinePatch<T extends object & { id: string }>(
+  path: string,
+  body: Record<string, unknown>,
+  /** 当前本地对象，用于合并成乐观结果 */
+  current: T,
+): Promise<T & { _offline?: boolean }> {
+  const merged = { ...current, ...body } as T & { _offline?: boolean }
+  if (_offline) {
+    enqueue({ method: 'PATCH', path, body })
+    cacheUpdate(listPathOf(path), merged)
+    return Promise.resolve(merged)
+  }
+  return http.patch<T>(path, body).catch(err => {
+    if (err instanceof ApiOfflineError) {
+      _offline = true
+      enqueue({ method: 'PATCH', path, body })
+      cacheUpdate(listPathOf(path), merged)
+      return merged
+    }
+    throw err
+  })
+}
+
+export function offlineDelete(
+  path: string,
+): Promise<{ ok: boolean; _offline?: boolean }> {
+  if (_offline) {
+    enqueue({ method: 'DELETE', path })
+    cacheRemove(listPathOf(path), idFromPath(path))
+    return Promise.resolve({ ok: true, _offline: true })
+  }
+  return http.delete<{ ok: boolean }>(path).catch(err => {
+    if (err instanceof ApiOfflineError) {
+      _offline = true
+      enqueue({ method: 'DELETE', path })
+      cacheRemove(listPathOf(path), idFromPath(path))
+      return { ok: true, _offline: true as const }
+    }
+    throw err
+  })
 }
 
 // ─── 类型（与 preload/index.ts 对齐） ────────────────────────────
@@ -92,6 +296,14 @@ export interface StudyTask {
   sort_order: number
   created_at: number
   updated_at: number
+}
+
+export interface StudyCheckin {
+  id: string
+  plan_id: string
+  date: string        // YYYY-MM-DD
+  note: string
+  created_at: number
 }
 
 export interface Note {
@@ -232,6 +444,20 @@ export const studyApi = {
   },
   taskDelete(id: string): Promise<{ ok: boolean }> {
     return http.delete(`/api/study/tasks/${id}`)
+  },
+}
+
+// ─── Study Checkins ───────────────────────────────────────────────
+
+export const checkinApi = {
+  list(planId: string, months = 3): Promise<StudyCheckin[]> {
+    return http.get(`/api/study/checkins?plan_id=${planId}&months=${months}`)
+  },
+  add(planId: string, date: string, note = ''): Promise<StudyCheckin> {
+    return http.post('/api/study/checkins', { plan_id: planId, date, note })
+  },
+  remove(planId: string, date: string): Promise<{ ok: boolean }> {
+    return http.delete(`/api/study/checkins/${planId}/${date}`)
   },
 }
 

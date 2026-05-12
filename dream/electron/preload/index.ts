@@ -29,6 +29,10 @@ export interface StudyTask {
   due_at: number | null; sort_order: number; created_at: number; updated_at: number
 }
 
+export interface StudyCheckin {
+  id: string; plan_id: string; date: string; note: string; created_at: number
+}
+
 export interface Note {
   id: string; title: string; content: string; tags: string
   is_pinned: number; created_at: number; updated_at: number
@@ -158,6 +162,9 @@ export interface DreamAPI {
     taskDone: (id: string, planId: string) => Promise<boolean>
     taskUndone: (id: string, planId: string) => Promise<boolean>
     taskDelete: (id: string, planId: string) => Promise<boolean>
+    checkinList: (planId: string, months?: number) => Promise<StudyCheckin[]>
+    checkinAdd: (planId: string, date: string, note?: string) => Promise<StudyCheckin>
+    checkinRemove: (planId: string, date: string) => Promise<boolean>
   }
   note: {
     list: (keyword?: string) => Promise<Note[]>
@@ -282,7 +289,10 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     taskAdd: (planId: string, data: Record<string, unknown>) => ipcRenderer.invoke('study:taskAdd', planId, data),
     taskDone: (id: string, planId: string) => ipcRenderer.invoke('study:taskDone', id, planId),
     taskUndone: (id: string, planId: string) => ipcRenderer.invoke('study:taskUndone', id, planId),
-    taskDelete: (id: string, planId: string) => ipcRenderer.invoke('study:taskDelete', id, planId)
+    taskDelete: (id: string, planId: string) => ipcRenderer.invoke('study:taskDelete', id, planId),
+    checkinList: (planId: string, months?: number) => ipcRenderer.invoke('study:checkinList', planId, months),
+    checkinAdd: (planId: string, date: string, note?: string) => ipcRenderer.invoke('study:checkinAdd', planId, date, note),
+    checkinRemove: (planId: string, date: string) => ipcRenderer.invoke('study:checkinRemove', planId, date),
   },
   note: {
     list: (keyword?: string) => ipcRenderer.invoke('note:list', keyword),

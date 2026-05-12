@@ -1,7 +1,7 @@
 <template>
   <div class="study-view">
     <!-- ========== 左栏：类型筛选 + 顶层计划列表 ========== -->
-    <div class="plan-sidebar">
+    <div class="plan-sidebar" :class="{ 'mobile-hidden': mobilePanel !== 'list' }">
       <div class="category-tabs">
         <el-button
           v-for="cat in PLAN_CATEGORIES" :key="cat.value"
@@ -25,7 +25,7 @@
         <div
           v-for="plan in store.plans" :key="plan.id"
           class="plan-card" :class="{ active: store.currentPlan?.id === plan.id }"
-          @click="store.selectPlan(plan)"
+          @click="store.selectPlan(plan); mobilePanel = 'detail'"
         >
           <div class="plan-color-bar" :style="{ background: plan.color }" />
           <div class="plan-info">
@@ -57,7 +57,11 @@
     </div>
 
     <!-- ========== 中栏：选中计划详情 + 顶层任务 + 子计划列表 ========== -->
-    <div class="plan-detail" v-if="store.currentPlan">
+    <div class="plan-detail" :class="{ 'mobile-hidden': mobilePanel !== 'detail' }" v-if="store.currentPlan">
+      <!-- 移动端返回 -->
+      <el-button class="mobile-back" link @click="mobilePanel = 'list'">
+        <el-icon><ArrowLeft /></el-icon> 计划列表
+      </el-button>
       <div class="detail-header">
         <div class="detail-title-row">
           <div class="plan-dot" :style="{ background: store.currentPlan.color }" />
@@ -109,6 +113,42 @@
         </div>
       </div>
 
+      <!-- 打卡区 -->
+      <div class="task-section checkin-section">
+        <div class="section-header">
+          <span class="section-label">打卡记录</span>
+          <div class="checkin-stats">
+            <span class="streak-badge" v-if="store.streakDays() > 0">🔥 连续 {{ store.streakDays() }} 天</span>
+            <el-button
+              v-if="!store.todayChecked()"
+              type="primary" size="small" round
+              @click="doCheckin"
+              :style="{ background: store.currentPlan?.color, borderColor: store.currentPlan?.color }"
+            >打卡</el-button>
+            <el-button
+              v-else size="small" round type="success" plain
+              @click="store.undoCheckin()"
+            >已打卡 ✓</el-button>
+          </div>
+        </div>
+        <!-- 热力图：近 12 周，每列 = 1 周 -->
+        <div class="checkin-heatmap">
+          <div v-for="week in checkinWeeks" :key="week.key" class="heatmap-col">
+            <div
+              v-for="cell in week.days" :key="cell.date"
+              class="heatmap-cell"
+              :class="{ checked: cell.checked, 'out-of-range': !cell.inRange }"
+              :style="cell.checked ? { background: store.currentPlan?.color, opacity: '0.85' } : {}"
+              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '')"
+            />
+          </div>
+        </div>
+        <div class="heatmap-legend">
+          <span class="legend-label">{{ checkinMonthLabel }}</span>
+          <span class="total-label">共 {{ store.checkins.length }} 次打卡</span>
+        </div>
+      </div>
+
       <!-- 子计划区 -->
       <div class="task-section">
         <div class="section-header">
@@ -122,7 +162,7 @@
           <div
             v-for="sub in store.subPlans" :key="sub.id"
             class="sub-plan-card" :class="{ active: store.currentSubPlan?.id === sub.id }"
-            @click="store.selectSubPlan(sub)"
+            @click="store.selectSubPlan(sub); mobilePanel = 'sub'"
           >
             <div class="sub-plan-color" :style="{ background: sub.color }" />
             <div class="sub-plan-info">
@@ -157,7 +197,11 @@
     </div>
 
     <!-- ========== 右栏：子计划详情 ========== -->
-    <div class="sub-detail" v-if="store.currentSubPlan">
+    <div class="sub-detail" :class="{ 'mobile-hidden': mobilePanel !== 'sub' }" v-if="store.currentSubPlan">
+      <!-- 移动端返回 -->
+      <el-button class="mobile-back" link @click="mobilePanel = 'detail'">
+        <el-icon><ArrowLeft /></el-icon> 计划详情
+      </el-button>
       <div class="detail-header">
         <div class="detail-title-row">
           <div class="plan-dot" :style="{ background: store.currentSubPlan.color }" />
@@ -258,12 +302,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Plus, Close, Edit } from '@element-plus/icons-vue'
+import { Plus, Close, Edit, ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useStudyStore, PLAN_CATEGORIES } from '../../stores/study'
 import type { StudyPlan, PlanCategory } from '../../stores/study'
 
 const store = useStudyStore()
+
+// 移动端面板：'list' | 'detail' | 'sub'
+const mobilePanel = ref<'list' | 'detail' | 'sub'>('list')
+
 const newTaskTitle = ref('')
 const newSubTaskTitle = ref('')
 const colors = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#5ac8fa', '#ff6b35']
@@ -279,6 +327,49 @@ const planForm = reactive<{
 }>({ title: '', goal: '', description: '', category: 'study', color: '#0071e3' })
 
 onMounted(() => store.loadPlans())
+
+// ===== 打卡热力图 =====
+
+/** 近 12 周（84 天）按列（周）组织，每列 7 格（日-六） */
+const checkinWeeks = computed(() => {
+  const checkedSet = new Set(store.checkins.map(c => c.date))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // 找到本周日（周的起始）
+  const startOfWeek = new Date(today)
+  startOfWeek.setDate(today.getDate() - today.getDay())
+
+  // 往前推 11 周，共 12 周
+  const firstSunday = new Date(startOfWeek)
+  firstSunday.setDate(startOfWeek.getDate() - 11 * 7)
+
+  const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean }[] }[] = []
+  const cursor = new Date(firstSunday)
+
+  for (let w = 0; w < 12; w++) {
+    const days = []
+    for (let d = 0; d < 7; d++) {
+      const dateStr = cursor.toISOString().slice(0, 10)
+      const inRange = cursor <= today
+      days.push({ date: dateStr, checked: checkedSet.has(dateStr), inRange })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    weeks.push({ key: weeks.length + '-' + days[0].date, days })
+  }
+  return weeks
+})
+
+const checkinMonthLabel = computed(() => {
+  if (!checkinWeeks.value.length) return ''
+  const first = checkinWeeks.value[0].days[0].date
+  const last = checkinWeeks.value[checkinWeeks.value.length - 1].days[6].date
+  return first.slice(0, 7).replace('-', '/') + ' – ' + last.slice(0, 7).replace('-', '/')
+})
+
+async function doCheckin() {
+  await store.checkin()
+}
 
 const currentCat = computed(() => PLAN_CATEGORIES.find(c => c.value === store.activeCategory)!)
 const currentCatLabel = computed(() => currentCat.value.label)
@@ -486,10 +577,50 @@ async function addSubTask() {
   background: var(--color-bg);
 }
 
+/* ========== 打卡热力图 ========== */
+.checkin-section { gap: 8px; }
+.checkin-stats { display: flex; align-items: center; gap: 8px; }
+.streak-badge { font-size: 12px; font-weight: 600; color: var(--color-text); white-space: nowrap; }
+
+.checkin-heatmap {
+  display: flex; gap: 3px; overflow-x: auto;
+  padding: 4px 0 6px;
+}
+.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-cell {
+  width: 13px; height: 13px; border-radius: 3px;
+  background: var(--color-border);
+  transition: background 150ms, transform 100ms;
+  cursor: default;
+  flex-shrink: 0;
+}
+.heatmap-cell.checked { transform: scale(1.05); }
+.heatmap-cell.out-of-range { opacity: 0.2; }
+
+.heatmap-legend {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: var(--color-text-muted);
+}
+.total-label { font-weight: 500; }
+
 /* ========== 弹窗内 ========== */
 .cat-grid { display: flex; gap: 6px; flex-wrap: wrap; }
 .color-picker { display: flex; gap: 8px; }
 .color-dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; transition: transform 150ms; }
 .color-dot:hover { transform: scale(1.15); }
 .color-dot.selected { outline: 3px solid var(--color-text); outline-offset: 2px; }
+
+/* ========== 移动端适配 ========== */
+.mobile-back { display: none; }
+
+@media (max-width: 640px) {
+  .plan-sidebar { width: 100%; border-right: none; }
+  .plan-detail { width: 100%; border-right: none; }
+  .sub-detail { width: 100%; }
+  .mobile-hidden { display: none !important; }
+  .mobile-back { display: inline-flex; margin-bottom: 8px; font-size: 13px; }
+  /* 移动端悬停操作按钮常显 */
+  .plan-card-actions { opacity: 1; }
+  .sub-plan-actions { opacity: 1; }
+}
 </style>

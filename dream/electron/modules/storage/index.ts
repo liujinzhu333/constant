@@ -212,6 +212,16 @@ export class StorageManager {
           updated_at  INTEGER DEFAULT (strftime('%s', 'now'))
         );
 
+        -- ===================== 业务包：打卡 =====================
+        CREATE TABLE IF NOT EXISTS study_checkins (
+          id          TEXT PRIMARY KEY,
+          plan_id     TEXT NOT NULL REFERENCES study_plans(id) ON DELETE CASCADE,
+          date        TEXT NOT NULL,                          -- YYYY-MM-DD，本地日期
+          note        TEXT DEFAULT '',                        -- 当天打卡备注（可选）
+          created_at  INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(plan_id, date)                              -- 每个计划每天只能打卡一次
+        );
+
         -- ===================== 业务包：账号管理 =====================
         CREATE TABLE IF NOT EXISTS accounts (
           id           TEXT PRIMARY KEY,

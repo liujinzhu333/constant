@@ -7,11 +7,14 @@
  *  3. GET /qrcode  — 返回局域网访问地址的 SVG 二维码
  *  4. GET /ping    — 心跳，返回 { ok, app, version, ip, port }
  *
- * 监听：0.0.0.0:45678（局域网可达）
+ * 监听：0.0.0.0:<PORT>（局域网可达）
+ *   生产端口：45678
+ *   开发端口：45679（避免与生产实例冲突）
  * CORS：全放行（局域网内可信）
  */
 
 import * as http from 'http'
+import * as https from 'https'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
@@ -20,7 +23,26 @@ import QRCode from 'qrcode'
 import { StorageManager } from '../storage'
 import { Logger } from '../logger'
 
-const PORT = 45678
+export const PORT_PROD = 45678
+export const PORT_DEV  = 45679
+
+/** 读取自签名证书，找不到则返回 null（降级为 http） */
+function loadCerts(appPath: string): { key: Buffer; cert: Buffer } | null {
+  // 优先从 app 目录找（打包后），其次从项目根目录找（开发时）
+  const candidates = [
+    path.join(appPath, 'certs'),
+    path.join(__dirname, '../../../certs'),
+    path.join(__dirname, '../../../../certs'),
+  ]
+  for (const dir of candidates) {
+    const keyPath  = path.join(dir, 'key.pem')
+    const certPath = path.join(dir, 'cert.pem')
+    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+      return { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
+    }
+  }
+  return null
+}
 
 // ─── 工具函数 ──────────────────────────────────────────────────
 
@@ -107,10 +129,14 @@ const MIME: Record<string, string> = {
 
 export class LocalHttpServer {
   private static instance: LocalHttpServer
-  private server: http.Server | null = null
+  private server: http.Server | https.Server | null = null
   private running = false
+  private port: number = PORT_PROD
+  private useHttps = false
   /** dream-web dist 目录，由外部调用 setWebRoot() 注入 */
   private webRoot: string | null = null
+  /** app 根目录，用于定位 certs/（由外部注入） */
+  private appPath: string = ''
 
   private constructor() {}
 
@@ -121,11 +147,20 @@ export class LocalHttpServer {
     return LocalHttpServer.instance
   }
 
+  /** 设置监听端口（必须在 start() 前调用） */
+  setPort(port: number) { this.port = port }
+
+  /** 注入 app 路径，用于定位证书 */
+  setAppPath(p: string) { this.appPath = p }
+
   isRunning() { return this.running }
-  getPort()   { return PORT }
+  getPort()   { return this.port }
+  isUsingHttps() { return this.useHttps }
+
   getLanUrl() {
+    const scheme = this.useHttps ? 'https' : 'http'
     const ips = getLanIPs()
-    return ips.length ? `http://${ips[0]}:${PORT}` : `http://localhost:${PORT}`
+    return ips.length ? `${scheme}://${ips[0]}:${this.port}` : `${scheme}://localhost:${this.port}`
   }
 
   /** 设置静态文件根目录（dream-web dist） */
@@ -135,7 +170,7 @@ export class LocalHttpServer {
     if (this.running) return
     const logger = Logger.getInstance()
 
-    this.server = http.createServer(async (req, res) => {
+    const handler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
       const method = req.method?.toUpperCase() ?? 'GET'
       const rawUrl  = req.url ?? '/'
 
@@ -151,18 +186,29 @@ export class LocalHttpServer {
         logger.error('HttpServer', `未处理异常 ${method} ${rawUrl}`, e)
         json(res, 500, { error: e?.message ?? 'Internal error' })
       }
-    })
+    }
 
-    this.server.listen(PORT, '0.0.0.0', () => {
+    // 尝试加载证书，成功则启 HTTPS，否则降级 HTTP
+    const certs = loadCerts(this.appPath)
+    if (certs) {
+      this.server = https.createServer({ key: certs.key, cert: certs.cert }, handler)
+      this.useHttps = true
+    } else {
+      this.server = http.createServer(handler)
+      this.useHttps = false
+      logger.warn('HttpServer', '未找到证书，降级为 HTTP（云端 Web 可能无法访问）')
+    }
+
+    this.server.listen(this.port, '0.0.0.0', () => {
       this.running = true
       const lan = this.getLanUrl()
-      logger.info('HttpServer', `已启动 → ${lan}  (局域网可达)`)
+      logger.info('HttpServer', `已启动 → ${lan}  (局域网可达, ${this.useHttps ? 'HTTPS' : 'HTTP'})`)
     })
 
     this.server.on('error', (err: NodeJS.ErrnoException) => {
       this.running = false
       if (err.code === 'EADDRINUSE') {
-        logger.warn('HttpServer', `端口 ${PORT} 已被占用`)
+        logger.warn('HttpServer', `端口 ${this.port} 已被占用`)
       } else {
         logger.error('HttpServer', '服务错误', err)
       }
@@ -195,7 +241,7 @@ export class LocalHttpServer {
       return json(res, 200, {
         ok: true, app: 'Dream',
         ip: getLanIPs()[0] ?? 'localhost',
-        port: PORT,
+        port: this.port,
         lan: this.getLanUrl(),
       })
     }
@@ -380,6 +426,42 @@ export class LocalHttpServer {
       const task = db.prepare('SELECT plan_id FROM study_tasks WHERE id=?').get(m.params.id) as any
       db.prepare('DELETE FROM study_tasks WHERE id=?').run(m.params.id)
       if (task) this.syncPlanProgress(db, task.plan_id)
+      return json(res, 200, { ok: true })
+    }
+
+    // ═══════════════ STUDY CHECKINS ═══════════════════════════
+
+    // GET /api/study/checkins?plan_id=xxx[&months=3]
+    if ((m = matchRoute(method, url, '/api/study/checkins', 'GET')).matched) {
+      if (!query.plan_id) return json(res, 400, { error: 'plan_id required' })
+      const months = Math.min(Number(query.months ?? 3), 12)
+      const since = new Date()
+      since.setMonth(since.getMonth() - months)
+      const sinceStr = since.toISOString().slice(0, 10)
+      return json(res, 200,
+        db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date>=? ORDER BY date ASC')
+          .all(query.plan_id, sinceStr))
+    }
+
+    // POST /api/study/checkins  { plan_id, date, note? }
+    if ((m = matchRoute(method, url, '/api/study/checkins', 'POST')).matched) {
+      const d = await readBody(req)
+      if (!d.plan_id || !d.date) return json(res, 400, { error: 'plan_id and date required' })
+      const id = uuid(); const t = now()
+      try {
+        db.prepare('INSERT INTO study_checkins (id,plan_id,date,note,created_at) VALUES (?,?,?,?,?)')
+          .run(id, d.plan_id, d.date, d.note ?? '', t)
+        return json(res, 201, db.prepare('SELECT * FROM study_checkins WHERE id=?').get(id))
+      } catch {
+        // UNIQUE 冲突：已打卡，返回已有记录
+        const existing = db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date=?').get(d.plan_id, d.date)
+        return json(res, 200, existing)
+      }
+    }
+
+    // DELETE /api/study/checkins/:planId/:date
+    if ((m = matchRoute(method, url, '/api/study/checkins/:planId/:date', 'DELETE')).matched) {
+      db.prepare('DELETE FROM study_checkins WHERE plan_id=? AND date=?').run(m.params.planId, m.params.date)
       return json(res, 200, { ok: true })
     }
 

@@ -109,6 +109,42 @@
         </div>
       </div>
 
+      <!-- 打卡区 -->
+      <div class="task-section checkin-section">
+        <div class="section-header">
+          <span class="section-label">打卡记录</span>
+          <div class="checkin-stats">
+            <span class="streak-badge" v-if="store.streakDays() > 0">🔥 连续 {{ store.streakDays() }} 天</span>
+            <el-button
+              v-if="!store.todayChecked()"
+              type="primary" size="small" round
+              @click="doCheckin"
+              :style="{ background: store.currentPlan?.color, borderColor: store.currentPlan?.color }"
+            >打卡</el-button>
+            <el-button
+              v-else size="small" round type="success" plain
+              @click="store.undoCheckin()"
+            >已打卡 ✓</el-button>
+          </div>
+        </div>
+        <!-- 热力图：近 12 周，每列 = 1 周 -->
+        <div class="checkin-heatmap">
+          <div v-for="week in checkinWeeks" :key="week.key" class="heatmap-col">
+            <div
+              v-for="cell in week.days" :key="cell.date"
+              class="heatmap-cell"
+              :class="{ checked: cell.checked, 'out-of-range': !cell.inRange }"
+              :style="cell.checked ? { background: store.currentPlan?.color, opacity: '0.85' } : {}"
+              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '')"
+            />
+          </div>
+        </div>
+        <div class="heatmap-legend">
+          <span class="legend-label">{{ checkinMonthLabel }}</span>
+          <span class="total-label">共 {{ store.checkins.length }} 次打卡</span>
+        </div>
+      </div>
+
       <!-- 子计划区 -->
       <div class="task-section">
         <div class="section-header">
@@ -279,6 +315,49 @@ const planForm = reactive<{
 }>({ title: '', goal: '', description: '', category: 'study', color: '#0071e3' })
 
 onMounted(() => store.loadPlans())
+
+// ===== 打卡热力图 =====
+
+/** 近 12 周（84 天）按列（周）组织，每列 7 格（日-六） */
+const checkinWeeks = computed(() => {
+  const checkedSet = new Set(store.checkins.map(c => c.date))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // 找到本周日（周的起始）
+  const startOfWeek = new Date(today)
+  startOfWeek.setDate(today.getDate() - today.getDay())
+
+  // 往前推 11 周，共 12 周
+  const firstSunday = new Date(startOfWeek)
+  firstSunday.setDate(startOfWeek.getDate() - 11 * 7)
+
+  const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean }[] }[] = []
+  const cursor = new Date(firstSunday)
+
+  for (let w = 0; w < 12; w++) {
+    const days = []
+    for (let d = 0; d < 7; d++) {
+      const dateStr = cursor.toISOString().slice(0, 10)
+      const inRange = cursor <= today
+      days.push({ date: dateStr, checked: checkedSet.has(dateStr), inRange })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    weeks.push({ key: weeks.length + '-' + days[0].date, days })
+  }
+  return weeks
+})
+
+const checkinMonthLabel = computed(() => {
+  if (!checkinWeeks.value.length) return ''
+  const first = checkinWeeks.value[0].days[0].date
+  const last = checkinWeeks.value[checkinWeeks.value.length - 1].days[6].date
+  return first.slice(0, 7).replace('-', '/') + ' – ' + last.slice(0, 7).replace('-', '/')
+})
+
+async function doCheckin() {
+  await store.checkin()
+}
 
 const currentCat = computed(() => PLAN_CATEGORIES.find(c => c.value === store.activeCategory)!)
 const currentCatLabel = computed(() => currentCat.value.label)
@@ -485,6 +564,32 @@ async function addSubTask() {
   display: flex; flex-direction: column; gap: 16px;
   background: var(--color-bg);
 }
+
+/* ========== 打卡热力图 ========== */
+.checkin-section { gap: 8px; }
+.checkin-stats { display: flex; align-items: center; gap: 8px; }
+.streak-badge { font-size: 12px; font-weight: 600; color: var(--color-text); white-space: nowrap; }
+
+.checkin-heatmap {
+  display: flex; gap: 3px; overflow-x: auto;
+  padding: 4px 0 6px;
+}
+.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-cell {
+  width: 13px; height: 13px; border-radius: 3px;
+  background: var(--color-border);
+  transition: background 150ms, transform 100ms;
+  cursor: default;
+  flex-shrink: 0;
+}
+.heatmap-cell.checked { transform: scale(1.05); }
+.heatmap-cell.out-of-range { opacity: 0.2; }
+
+.heatmap-legend {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: var(--color-text-muted);
+}
+.total-label { font-weight: 500; }
 
 /* ========== 弹窗内 ========== */
 .cat-grid { display: flex; gap: 6px; flex-wrap: wrap; }
