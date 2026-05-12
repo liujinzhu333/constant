@@ -1,0 +1,37 @@
+dream-web/src/stores/study.ts
+  s_35a9999416f564::t_efddf05e396349 155,157-167
+  s_35a9999416f564::t_7290f3b8133b86 287,292-294,296-300
+  s_35a9999416f564::t_83dd3f629e58e1 320-323,327,335-340
+  s_35a9999416f564::t_3ee0e3403cb579 260,263,265,272-282
+  s_35a9999416f564::t_3e5f858fc25fe9 233,238-240,242-247
+  s_35a9999416f564::t_119aaa482bc0ad 151-154,156,168-169
+  s_35a9999416f564::t_80165b21da2f72 3
+  s_f472def30f714e::t_aa3356f5a2d634 345-347
+  s_f472def30f714e::t_96872cff853475 17-18,70-84,90-96,105,108-109,133-147,174-180,189,191,194,199,203,205-206,208,210-213,234-237,252,259,261-262,264,266-269,288-291,305
+  s_35a9999416f564::t_8b955f594a9e7d 204,207,209,216-228
+  s_f472def30f714e::t_6cafb055d6fbcd 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "059e65780590db6003d3d2110b8636145227a638",
+  "prompts": {},
+  "sessions": {
+    "s_35a9999416f564": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e5b39d03ffeCTxgiq9lGz1bFi",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    },
+    "s_f472def30f714e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1f42258d9ffe684Mu5JcrH4pEM",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
