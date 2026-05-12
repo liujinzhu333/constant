@@ -1,6 +1,6 @@
 # Dream 项目开发上下文
 
-> 最后更新：2026-04-30（收藏刷新按钮 + Chrome 插件 HTTP 服务管理）
+> 最后更新：2026-05-09（设置页「Chrome 插件」改名为「服务地址」；开发/生产端口分离 45679/45678）
 
 ---
 
@@ -188,14 +188,14 @@ Electron IPC 使用结构化克隆算法，Vue 响应式对象（`Proxy`）无�
 ### 11. Element Plus 按钮间距陷阱
 `.el-button + .el-button` 有默认 `margin-left: 12px`，多按钮容器必须用 `:deep(.el-button + .el-button) { margin-left: 0 }` 覆盖，不与 `gap` 混用。
 
-### 12. 本地 HTTP 服务（Chrome 插件通信桥）
+### 12. 本地 HTTP 服务（服务地址）
 - 模块：`electron/modules/http-server/index.ts`，`LocalHttpServer` 单例
-- 端口：`45678`，仅监听 `127.0.0.1`（拒绝非本机请求）
+- 端口：生产 `45678`，开发 `45679`，两者互不冲突，可同时运行
 - **开发环境**：随 `bootstrap()` 自动启动，无需手动操作
-- **生产环境**：默认不启动，需在设置页「Chrome 插件」区域手动点「启动服务」
+- **生产环境**：默认不启动，需在设置页「服务地址」区域手动点「启动服务」
 - 端点：`GET /ping`（心跳）、`POST /favorite`（写入收藏，同 URL 自动去重）
 - IPC：`httpServer:start / stop / status`，设置页进入时自动查询状态
-- **切换收藏目标**：同一端口同时只能有一个实例监听；开发版和生产版不能同时开启 HTTP 服务，需先停一个再开另一个
+- **所有 Web 项目**（浏览器插件、移动端等）均可通过该服务读写 Dream 数据
 
 ---
 

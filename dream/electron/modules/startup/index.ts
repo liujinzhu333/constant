@@ -11,7 +11,7 @@ import { Logger } from '../logger'
 import { StorageManager } from '../storage'
 import { SystemAdapter } from '../system'
 import { UpdaterModule } from '../updater'
-import { LocalHttpServer } from '../http-server'
+import { LocalHttpServer, PORT_DEV, PORT_PROD } from '../http-server'
 
 // vite-plugin-electron 开发时注入 VITE_DEV_SERVER_URL，以此判断是否开发模式
 const isDev = !!process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development'
@@ -62,7 +62,10 @@ export class StartupManager {
     await app.whenReady()
 
     // 6. 启动本地 HTTP 服务（必须在 loadApp 之前，否则 loadURL 会 ERR_CONNECTION_REFUSED）
+    //    开发模式用 45679，避免与本机已运行的生产实例（45678）冲突
     const httpServer = LocalHttpServer.getInstance()
+    httpServer.setPort(isDev ? PORT_DEV : PORT_PROD)
+    httpServer.setAppPath(app.getAppPath())
     if (!isDev) {
       const webRoot = path.join(__dirname, '../../dist-web')
       httpServer.setWebRoot(webRoot)
@@ -143,31 +146,48 @@ export class StartupManager {
       logger.info('Startup', `开发模式加载: ${devUrl}`)
     } else {
       // 生产模式：加载本地 HTTP Server 提供的 dream-web Web App
-      // HTTP Server 在上一步已启动（bootstrap step 11）
-      const webAppUrl = `http://localhost:45678/`
-      // 稍等 HTTP Server 就绪（最多 2 秒）
+      const srv = LocalHttpServer.getInstance()
+      const scheme = srv.isUsingHttps() ? 'https' : 'http'
+      const webAppUrl = `${scheme}://localhost:${PORT_PROD}/`
+
+      // 自签名证书：让 Electron 信任本地 HTTPS（仅对 localhost 生效）
+      if (srv.isUsingHttps()) {
+        win.webContents.session.setCertificateVerifyProc((request, callback) => {
+          // 只放行本地 localhost 的自签名证书
+          if (request.hostname === 'localhost') {
+            callback(0)  // 0 = 信任
+          } else {
+            callback(-3) // -3 = 使用默认验证
+          }
+        })
+      }
+
+      // 稍等 HTTP Server 就绪（用 Node https 模块，忽略证书验证）
       await this.waitForHttpServer(webAppUrl, 2000, logger)
       await win.loadURL(webAppUrl)
       logger.info('Startup', `生产模式加载 Web App: ${webAppUrl}`)
     }
   }
 
-  /** 等待 HTTP Server 就绪（轮询 /ping 接口） */
+  /** 等待 HTTP Server 就绪（用原生 https/http 轮询，自签名证书忽略验证） */
   private async waitForHttpServer(baseUrl: string, timeoutMs: number, logger: Logger) {
+    const isHttps = baseUrl.startsWith('https')
+    const mod = isHttps ? await import('https') : await import('http')
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
-      try {
-        const { net } = await import('electron')
-        const req = net.request(`${baseUrl}ping`)
-        await new Promise<void>((resolve) => {
-          req.on('response', () => resolve())
-          req.on('error', () => resolve())
+      const ok = await new Promise<boolean>(resolve => {
+        try {
+          const req = (mod as typeof import('https')).request(
+            `${baseUrl}ping`,
+            { rejectUnauthorized: false },
+            () => resolve(true)
+          )
+          req.on('error', () => resolve(false))
+          req.setTimeout(500, () => { req.destroy(); resolve(false) })
           req.end()
-        })
-        return
-      } catch {
-        // 继续等待
-      }
+        } catch { resolve(false) }
+      })
+      if (ok) return
       await new Promise(r => setTimeout(r, 100))
     }
     logger.warn('Startup', 'HTTP Server 未在超时内就绪，继续加载页面')

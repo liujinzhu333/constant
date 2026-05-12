@@ -57,7 +57,7 @@ declare global {
       httpServer: {
         start: () => Promise<{ success: boolean; port?: number; error?: string }>
         stop: () => Promise<{ success: boolean; error?: string }>
-        status: () => Promise<{ running: boolean; port: number }>
+        status: () => Promise<{ running: boolean; port: number; lanUrl?: string }>
       }
     }
   }

@@ -9,7 +9,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import CryptoJS from 'crypto-js'
-import { accountApi, type Account, type AccountCategory } from '../utils/api'
+import { accountApi, offlinePost, offlinePatch, offlineDelete, type Account, type AccountCategory } from '../utils/api'
+import { useConnectionStore } from './connection'
 export type { AccountCategory }
 
 /** 带明文密码的前端扩展类型 */
@@ -89,6 +90,9 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  // 向 connection store 注册数据刷新回调（重连同步时调用）
+  useConnectionStore().registerRefresh(load)
+
   /** 新增账号 */
   async function addAccount(data: {
     platform: string
@@ -103,16 +107,34 @@ export const useAccountStore = defineStore('account', () => {
     const password_enc = data.password && secretKey.value
       ? encryptPassword(data.password, secretKey.value)
       : ''
-    const created = await accountApi.add({
+    const body: Record<string, unknown> = {
       platform: data.platform,
-      platform_url: data.platform_url,
-      account_name: data.account_name,
-      phone: data.phone,
-      email: data.email,
+      platform_url: data.platform_url ?? '',
+      account_name: data.account_name ?? '',
+      phone: data.phone ?? '',
+      email: data.email ?? '',
       password_enc,
-      note: data.note,
-      category: data.category ?? 'other'
-    })
+      note: data.note ?? '',
+      category: data.category ?? 'other',
+    }
+    const t = Math.floor(Date.now() / 1000)
+    const created = await offlinePost<Account>(
+      '/api/accounts',
+      body,
+      (tempId) => ({
+        id: tempId,
+        platform: data.platform,
+        platform_url: data.platform_url ?? '',
+        account_name: data.account_name ?? '',
+        phone: data.phone ?? '',
+        email: data.email ?? '',
+        password_enc,
+        note: data.note ?? '',
+        category: data.category ?? 'other',
+        created_at: t,
+        updated_at: t,
+      }),
+    )
     accounts.value.unshift({ ...created, password_plain: data.password })
   }
 
@@ -127,7 +149,7 @@ export const useAccountStore = defineStore('account', () => {
     note?: string
     category?: AccountCategory
   }) {
-    const patch: Record<string, string> = {}
+    const patch: Record<string, unknown> = {}
     if (data.platform !== undefined) patch.platform = data.platform
     if (data.platform_url !== undefined) patch.platform_url = data.platform_url
     if (data.account_name !== undefined) patch.account_name = data.account_name
@@ -140,7 +162,9 @@ export const useAccountStore = defineStore('account', () => {
         ? encryptPassword(data.password, secretKey.value)
         : ''
     }
-    const updated = await accountApi.update(id, patch)
+    const current = accounts.value.find(a => a.id === id)
+    if (!current) return
+    const updated = await offlinePatch<Account>(`/api/accounts/${id}`, patch, current)
     const idx = accounts.value.findIndex(a => a.id === id)
     if (idx !== -1) {
       accounts.value[idx] = {
@@ -152,7 +176,7 @@ export const useAccountStore = defineStore('account', () => {
 
   /** 删除账号 */
   async function deleteAccount(id: string) {
-    await accountApi.delete(id)
+    await offlineDelete(`/api/accounts/${id}`)
     accounts.value = accounts.value.filter(a => a.id !== id)
   }
 

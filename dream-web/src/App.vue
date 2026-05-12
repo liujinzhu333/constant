@@ -34,6 +34,7 @@ const showTitlebar = isElectron && isMac
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* 动态视口高度，移动端浏览器工具栏收缩时自动适配 */
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-text);

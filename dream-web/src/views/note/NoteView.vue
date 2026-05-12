@@ -1,7 +1,7 @@
 <template>
   <div class="note-view">
     <!-- 左侧笔记列表 -->
-    <div class="note-sidebar">
+    <div class="note-sidebar" :class="{ 'mobile-hidden': mobilePanel === 'editor' }">
       <div class="sidebar-head">
         <el-input
           :model-value="searchKeyword"
@@ -22,7 +22,7 @@
         <div
           v-for="note in store.notes" :key="note.id"
           class="note-card" :class="{ active: store.current?.id === note.id }"
-          @click="store.select(note)"
+          @click="store.select(note); mobilePanel = 'editor'"
         >
           <div class="note-card-header">
             <span class="note-title">{{ note.title || '无标题' }}</span>
@@ -40,8 +40,12 @@
     </div>
 
     <!-- 右侧编辑区 -->
-    <div class="note-editor" v-if="store.current">
+    <div class="note-editor" :class="{ 'mobile-hidden': mobilePanel === 'list' }" v-if="store.current || mobilePanel === 'editor'">
       <div class="editor-toolbar">
+        <!-- 移动端返回按钮 -->
+        <el-button class="mobile-back" link @click="mobilePanel = 'list'">
+          <el-icon><ArrowLeft /></el-icon>
+        </el-button>
         <input
           class="title-input"
           :value="localTitle"
@@ -75,7 +79,7 @@
       </div>
     </div>
 
-    <div class="note-empty" v-else>
+    <div class="note-empty" :class="{ 'mobile-hidden': mobilePanel === 'list' }" v-else>
       <el-empty description="选择笔记或新建一篇" :image-size="80" />
     </div>
   </div>
@@ -83,13 +87,16 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { Search, Plus, Star, StarFilled, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, Star, StarFilled, Delete, ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useNoteStore } from '../../stores/note'
 import { useDebouncedCall } from '../../composables/useDebounce'
 import dayjs from 'dayjs'
 
 const store = useNoteStore()
+
+// 移动端面板切换：'list' | 'editor'
+const mobilePanel = ref<'list' | 'editor'>('list')
 
 // ========== 搜索（防抖 400ms，保持 :model-value + @input 隔离）==========
 const searchKeyword = ref('')
@@ -178,6 +185,8 @@ function formatDate(ts: number) {
   width: 220px; flex-shrink: 0; border-right: 1px solid var(--color-border);
   background: var(--color-bg-sidebar); display: flex; flex-direction: column; padding: 12px 10px;
 }
+
+.mobile-back { display: none; }
 .sidebar-head { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
 
 .note-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -214,5 +223,12 @@ function formatDate(ts: number) {
 .editor-footer {
   display: flex; justify-content: space-between; flex-shrink: 0;
   padding: 8px 20px; border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 640px) {
+  .note-sidebar { width: 100%; border-right: none; }
+  .note-editor { width: 100%; }
+  .mobile-hidden { display: none !important; }
+  .mobile-back { display: inline-flex; }
 }
 </style>

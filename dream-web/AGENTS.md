@@ -5,9 +5,10 @@
 ## 项目概述
 
 Dream Web 是 **Dream 跨端个人助手系统的唯一前端 UI**，基于 **Vue 3 + Vite + TypeScript + Vant** 构建。  
-PC 端（Electron）和手机端共用本项目，数据全部通过 PC 端 HTTP Server（`:45678`）读写本地 SQLite。
+PC 端（Electron）和手机端共用本项目，数据全部通过 PC 端 HTTP Server 读写本地 SQLite。
 
 - **平台支持**：PC（Electron 渲染进程加载 localhost:45678）/ 手机浏览器（局域网 IP:45678）
+- **HTTP Server 端口**：生产 `45678`，开发 `45679`（开发时 vite proxy 指向 45679）
 - **当前版本**：1.0.0
 - **数据源**：PC 端 SQLite（`dream.db`），通过 REST API 访问
 

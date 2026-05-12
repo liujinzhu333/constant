@@ -57,7 +57,7 @@
     </div>
 
     <!-- 新建日程弹窗 -->
-    <el-dialog v-model="showAdd" title="新建日程" width="420px">
+    <el-dialog v-model="showAdd" title="新建日程" :width="isMobile ? '92%' : '420px'">
       <el-form :model="form" label-width="60px">
         <el-form-item label="标题">
           <el-input v-model="form.title" placeholder="日程标题" />
@@ -100,6 +100,7 @@ const store = useScheduleStore()
 const showAdd = ref(false)
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const colors = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#5ac8fa']
+const isMobile = window.innerWidth <= 600
 
 const form = reactive({
   title: '', note: '', start: '', end: '', allDay: false, color: '#0071e3'
@@ -151,7 +152,8 @@ async function submit() {
 </script>
 
 <style scoped>
-.schedule-view { display: flex; height: 100%; overflow: hidden; }
+/* ========== 基础（PC 左右布局） ========== */
+.schedule-view { display: flex; flex-direction: row; height: 100%; overflow: hidden; }
 
 .calendar-panel {
   width: 280px; flex-shrink: 0; border-right: 1px solid var(--color-border);
@@ -195,4 +197,28 @@ async function submit() {
 .color-dot { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; transition: transform 150ms; }
 .color-dot:hover { transform: scale(1.2); }
 .color-dot.selected { outline: 3px solid var(--color-text); outline-offset: 2px; }
+
+/* ========== 移动端（上下布局） ========== */
+@media (max-width: 600px) {
+  .schedule-view { flex-direction: column; overflow-y: auto; }
+
+  .calendar-panel {
+    width: 100%; border-right: none; border-bottom: 1px solid var(--color-border);
+    padding: 12px 12px 10px; gap: 8px; flex-shrink: 0;
+  }
+
+  .month-label { font-size: 14px; }
+
+  .weekdays span { font-size: 10px; padding: 2px 0; }
+
+  .days-grid { gap: 1px; }
+
+  .day-num { font-size: 12px; }
+
+  .day-panel { flex: 1; padding: 14px 16px; gap: 12px; overflow: visible; min-height: 0; }
+
+  .day-header h3 { font-size: 15px; }
+
+  .event-list { flex: none; overflow-y: visible; }
+}
 </style>

@@ -92,19 +92,26 @@
         </el-card>
       </section>
 
-      <!-- Chrome 插件 / 本地 HTTP 服务 -->
+      <!-- 服务地址 / 本地 HTTP 服务 -->
       <section class="settings-section">
-        <h2 class="section-title">Chrome 插件</h2>
+        <h2 class="section-title">服务地址</h2>
         <el-card shadow="never">
           <el-descriptions :column="1" border>
             <el-descriptions-item label="服务状态">
               <el-tag :type="httpRunning ? 'success' : 'info'">
-                {{ httpRunning ? `运行中（端口 ${httpPort}）` : '已停止' }}
+                {{ httpRunning ? '运行中' : '已停止' }}
               </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="httpRunning" label="访问地址">
+              <div class="lan-url-row">
+                <el-text class="lan-url-text">{{ httpLanUrl }}</el-text>
+                <el-button link size="small" @click="copyLanUrl">复制</el-button>
+              </div>
             </el-descriptions-item>
             <el-descriptions-item label="说明">
               <el-text size="small" type="info">
-                开启后 Chrome 插件可将网页收藏到当前运行的 Dream 实例（开发或生产环境）
+                开启后所有 Web 项目（浏览器插件、移动端等）均可通过本地 HTTP 服务访问当前 Dream 实例数据。
+                生产环境端口 45678，开发环境端口 45679，两者互不冲突。
               </el-text>
             </el-descriptions-item>
           </el-descriptions>
@@ -205,6 +212,7 @@ const backups = ref<BackupInfo[]>([])
 // HTTP 服务
 const httpRunning = ref(false)
 const httpPort = ref(45678)
+const httpLanUrl = ref('')
 const httpToggling = ref(false)
 
 // 日志查看器
@@ -253,6 +261,7 @@ onMounted(async () => {
   const httpStatus = await api.httpServer.status()
   httpRunning.value = httpStatus.running
   httpPort.value = httpStatus.port
+  httpLanUrl.value = httpStatus.lanUrl ?? `http://localhost:${httpStatus.port}`
   removeStatusListener = api.updater.onStatus(async (data) => {
     updateStatus.value = data.status
     // 下载完成后弹出安装确认
@@ -383,9 +392,11 @@ async function startHttpServer() {
   try {
     const result = await api.httpServer.start()
     if (result.success) {
-      httpRunning.value = true
-      httpPort.value = result.port ?? 45678
-      ElMessage.success(`HTTP 服务已启动（端口 ${httpPort.value}）`)
+      const s = await api.httpServer.status()
+      httpRunning.value = s.running
+      httpPort.value = s.port
+      httpLanUrl.value = s.lanUrl ?? `http://localhost:${s.port}`
+      ElMessage.success(`HTTP 服务已启动（${httpLanUrl.value}）`)
     } else {
       ElMessage.error(result.error ?? '启动失败')
     }
@@ -402,6 +413,7 @@ async function stopHttpServer() {
     const result = await api.httpServer.stop()
     if (result.success) {
       httpRunning.value = false
+      httpLanUrl.value = ''
       ElMessage.success('HTTP 服务已停止')
     } else {
       ElMessage.error(result.error ?? '停止失败')
@@ -409,6 +421,12 @@ async function stopHttpServer() {
   } finally {
     httpToggling.value = false
   }
+}
+
+async function copyLanUrl() {
+  if (!httpLanUrl.value) return
+  await navigator.clipboard.writeText(httpLanUrl.value)
+  ElMessage.success('已复制')
 }
 
 async function loadBackups() {
@@ -625,6 +643,14 @@ function logLineClass(line: string): string {
 .section-title {
   font-size: 12px; font-weight: 600; color: var(--color-text-muted);
   text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+}
+
+.lan-url-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.lan-url-text {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px; word-break: break-all;
 }
 
 .path-text {

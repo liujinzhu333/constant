@@ -252,7 +252,7 @@ export class IpcManager {
     })
 
     ipcMain.handle('httpServer:status', () => {
-      return { running: srv.isRunning(), port: srv.getPort() }
+      return { running: srv.isRunning(), port: srv.getPort(), lanUrl: srv.getLanUrl() }
     })
   }
 }

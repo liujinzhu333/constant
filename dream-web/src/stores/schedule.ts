@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { scheduleApi, type Schedule } from '../utils/api'
+import { scheduleApi, offlinePost, offlinePatch, offlineDelete, type Schedule } from '../utils/api'
+import { useConnectionStore } from './connection'
 import dayjs from 'dayjs'
 
 export type { Schedule }
+
+const now = () => Math.floor(Date.now() / 1000)
 
 export const useScheduleStore = defineStore('schedule', () => {
   const schedules = ref<Schedule[]>([])
@@ -20,7 +23,6 @@ export const useScheduleStore = defineStore('schedule', () => {
       .sort((a, b) => a.start_at - b.start_at)
   })
 
-  // 当月每天是否有日程（用于日历标记）
   const markedDays = computed(() => {
     const set = new Set<string>()
     schedules.value.forEach(s => {
@@ -59,22 +61,42 @@ export const useScheduleStore = defineStore('schedule', () => {
     title: string; note?: string; start_at: number; end_at: number
     all_day?: number; color?: string; remind_at?: number
   }) {
-    const s = await scheduleApi.add(data)
+    const t = now()
+    const s = await offlinePost<Schedule>(
+      '/api/schedules',
+      { ...data, start_at: data.start_at * 1000, end_at: data.end_at * 1000 },
+      (tempId) => ({
+        id: tempId, title: data.title, note: data.note ?? '',
+        start_at: data.start_at, end_at: data.end_at,
+        all_day: data.all_day ?? 0, color: data.color ?? '#0071e3',
+        remind_at: data.remind_at ?? null, repeat_rule: '',
+        created_at: t, updated_at: t,
+      }),
+    )
     schedules.value.push(s)
     schedules.value.sort((a, b) => a.start_at - b.start_at)
     return s
   }
 
   async function update(id: string, data: Partial<Schedule>) {
-    const updated = await scheduleApi.update(id, data as Record<string, unknown>)
+    const current = schedules.value.find(s => s.id === id)
+    if (!current) return
+    const updated = await offlinePatch<Schedule>(
+      `/api/schedules/${id}`,
+      data as Record<string, unknown>,
+      current,
+    )
     const idx = schedules.value.findIndex(s => s.id === id)
     if (idx !== -1 && updated) schedules.value[idx] = updated
   }
 
   async function remove(id: string) {
-    await scheduleApi.delete(id)
+    await offlineDelete(`/api/schedules/${id}`)
     schedules.value = schedules.value.filter(s => s.id !== id)
   }
+
+  // 向 connection store 注册数据刷新回调（重连同步时重载当前月份日程）
+  useConnectionStore().registerRefresh(() => loadMonth())
 
   return { schedules, currentMonth, selectedDate, monthLabel, todaySchedules, markedDays, loadMonth, prevMonth, nextMonth, selectDate, add, update, remove }
 })
