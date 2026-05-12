@@ -273,6 +273,8 @@ export const useStudyStore = defineStore('study', () => {
   async function toggleTask(task: StudyTask) {
     if (!currentPlan.value) return
     const planId = currentPlan.value.id
+    // 在 syncProgress 替换 currentPlan.value 之前，先把打卡开关状态保存下来
+    const checkinEnabled = !!currentPlan.value.checkin_enabled
     const patch = task.status === 'todo'
       ? { status: 'done' as const }
       : { status: 'todo' as const }
@@ -290,7 +292,7 @@ export const useStudyStore = defineStore('study', () => {
 
     // 若计划开启打卡，在本地直接判断是否需要自动打卡/撤卡
     // 离线时后端不会执行 tryAutoCheckin，需前端自己维护 checkins
-    if (currentPlan.value.checkin_enabled) {
+    if (checkinEnabled) {
       const today = new Date().toISOString().slice(0, 10)
       const allDone = tasks.value.length > 0 && tasks.value.every(t => t.status === 'done')
       const alreadyChecked = checkins.value.some(c => c.date === today)
