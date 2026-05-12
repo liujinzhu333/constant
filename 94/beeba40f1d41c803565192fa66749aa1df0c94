@@ -1,0 +1,49 @@
+dream-web/src/views/study/StudyView.vue
+  s_35a9999416f564::t_d859535b8dba14 34,60,84-118,256,261,275,277-278,292-313,318,349-353,407,421-423,438,452,461,468-472,547-551,612,614-616,618,629,646
+dream/electron/modules/business/index.ts
+  s_35a9999416f564::t_a9fff91cfb73f5 122,126-127,131-133,139-141,143-146
+  s_35a9999416f564::t_82be08f53af084 201-230
+  s_35a9999416f564::t_a72ce45494a687 175,182-183
+dream-web/src/stores/study.ts
+  s_35a9999416f564::t_a6de804622f9c6 210
+  s_35a9999416f564::t_a972d5612bf2da 290-294
+  s_35a9999416f564::t_712d887bcd5eb8 75
+  s_35a9999416f564::t_c1b6ae67a18356 404
+  s_35a9999416f564::t_0efdc6776b112d 90-92
+  s_35a9999416f564::t_c2e36b0008dca2 156
+dream/electron/preload/index.ts
+  s_35a9999416f564::t_bb44dd3de2b50c 159
+  s_35a9999416f564::t_81ee3f39c241a4 24-26
+dream-web/src/utils/api.ts
+  s_35a9999416f564::t_1fb5538ead7994 278-280
+  s_35a9999416f564::t_402c72cded8f05 427
+dream/electron/modules/storage/index.ts
+  s_35a9999416f564::t_5bfdb190d3c038 253-262
+  s_35a9999416f564::t_c3005996613173 138-152
+dream/src/stores/study.ts
+  s_35a9999416f564::t_48b1498a06015b 247,287
+  s_35a9999416f564::t_8c76e32a1fa47e 170-171,173-174,176-177,180-183
+  s_35a9999416f564::t_31cb93baea71d0 74
+dream/src/views/study/StudyView.vue
+  s_35a9999416f564::t_1a166a04f989f2 34,60,80-114,248,253,267,269-270,284-306,311,338-342,396,410-412,427,441,450,457-461,536-540,601,603-605,607,618,635
+dream/electron/modules/http-server/index.ts
+  s_35a9999416f564::t_2608b8b3f7d4bb 362-363,366-368,376
+  s_35a9999416f564::t_f63b4a1954c62c 422-432,440-443
+  s_35a9999416f564::t_b954cba671d506 685-707
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "94beeba40f1d41c803565192fa66749aa1df0c94",
+  "prompts": {},
+  "sessions": {
+    "s_35a9999416f564": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e5b39d03ffeCTxgiq9lGz1bFi",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
