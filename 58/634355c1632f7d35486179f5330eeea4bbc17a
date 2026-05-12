@@ -1,0 +1,120 @@
+dream-web/src/stores/note.ts
+  s_f472def30f714e::t_d752bb78efccef 4,25-26
+  s_f472def30f714e::t_d00bcd5d3c6f7c 3,8-9,38-46,53-59,66-69,74,80
+dream-web/src/stores/todo.ts
+  s_f472def30f714e::t_08a805e97eaf3a 32-34
+  s_f472def30f714e::t_187f2fa0d66f01 3,8-9,36-47,53-59,61,69-70,72,74-75,82
+  s_f472def30f714e::t_654445e65a6a2e 4
+dream-web/AGENTS.md
+  s_f472def30f714e::t_c4048f7af3eac1 8,11
+dream-web/src/stores/account.ts
+  s_f472def30f714e::t_aee4509f7fb3fb 12-13
+  s_f472def30f714e::t_32f5f82bdb42a3 93-95,110,112-115,117-137,152,165-167,179
+dream/src/views/SettingsView.vue
+  s_f472def30f714e::t_1472730193106d 102,105-109
+  s_f472def30f714e::t_26f05dae161f14 215
+  s_f472def30f714e::t_cceb9c3763762b 648-655
+  s_f472def30f714e::t_e3875cb81dfb54 426-431
+  s_f472def30f714e::t_d3717dc45a4eb7 264
+  s_f472def30f714e::t_fdf6905280915b 95,97
+  s_f472def30f714e::t_1be24b9741e01c 113-114
+  s_f472def30f714e::t_68b785717183de 395-399
+  s_f472def30f714e::t_c003ee51119a25 416
+dream-web/src/utils/offline-queue.ts
+  s_f472def30f714e::t_73c5112db64b78 139-140,142
+  s_f472def30f714e::t_58d5413c393f83 114,116,129,131
+  s_f472def30f714e::t_8cb54e6cf3efde 1-15,17-113,115,117-128,130,132-138,141,143-147
+  s_f472def30f714e::t_602b847e248464 16
+dream/electron/modules/ipc/index.ts
+  s_f472def30f714e::t_a7b5d8e140242d 255
+dream-web/src/stores/schedule.ts
+  s_f472def30f714e::t_3c71b08c2ab6f1 4
+  s_f472def30f714e::t_92a255073a845f 98-100
+  s_f472def30f714e::t_b455c0b1b578c6 3,9-10,64-75,82-88,94
+dream-web/src/views/schedule/ScheduleView.vue
+  s_35a9999416f564::t_51a770104718cc 155-156,200-223
+  s_35a9999416f564::t_f51562bc0910e4 103
+  s_35a9999416f564::t_530c58dc9a2903 60
+dream/electron/modules/startup/index.ts
+  s_f472def30f714e::t_97ebd6db0cb670 152-165,172,174-175,178-186,188-190
+  s_f472def30f714e::t_93345fcfbb627a 14
+  s_f472def30f714e::t_81073687e9f777 68
+  s_f472def30f714e::t_f938e766113c8f 149-151
+  s_f472def30f714e::t_3855f8772786fa 65,67
+dream-web/src/App.vue
+  s_22a760f35699ec::t_5c241d6aff13b3 37
+dream/CONTEXT.md
+  s_f472def30f714e::t_58b0b8b65503f3 3
+  s_f472def30f714e::t_4b6654845951df 191,193,195,198
+dream/package.json
+  s_f472def30f714e::t_002c05e0459c64 66-67
+  s_f472def30f714e::t_9acc74fe232504 8-11
+dream-web/src/stores/favorite.ts
+  s_f472def30f714e::t_b2d1b5b31a5fd0 3,9-10,32-44,56-59,67-71,83
+  s_f472def30f714e::t_45c714ef6f3b2d 4,24-26
+dream/AGENTS.md
+  s_f472def30f714e::t_f45f3ff3a2d649 3
+  s_f472def30f714e::t_7730975be822b2 243
+dream-web/vite.config.mts
+  s_f472def30f714e::t_7a282da55af55b 32-40,45-52,57-64
+  s_f472def30f714e::t_d9b36653e58124 27,30,43,55
+dream-web/src/views/HomeView.vue
+  s_f472def30f714e::t_7cce453d9e067b 176,190
+  s_f472def30f714e::t_49821b050c6e8f 162-175,198
+  s_22a760f35699ec::t_243686c1b1972b 180,194,196
+  s_22a760f35699ec::t_2f18188698b339 195,197
+  s_22a760f35699ec::t_629106ef5dfa57 116
+  s_f472def30f714e::t_67587bab40c130 4,14-15,24,28-35,54,56,73-86,118,120-121,124-125,128-130,133,135,145,151-161,178-179,181-189,191-193
+  s_f472def30f714e::t_a23a6b603ff24b 58-61
+  s_f472def30f714e::t_7f5a9ee67595d7 41-45
+dream-web/src/stores/connection.ts
+  s_f472def30f714e::t_98f3695b4e0976 1-9,13-16,19-21,29-30,35-37,46,57-59,61-69,71-74,76-79,81-82,114,120
+  s_f472def30f714e::t_17f163e34b6a5f 17
+  s_f472def30f714e::t_e1101142ad0ba6 60,70,75,80,83
+  s_f472def30f714e::t_2488fbe0d38793 10-12,18,22-28,31-34,38-45,47-56,84-113,115-119
+dream-web/src/views/note/NoteView.vue
+  s_f472def30f714e::t_9327b516ce0ec2 90
+  s_f472def30f714e::t_349f4c4f38f438 98-100
+  s_f472def30f714e::t_6d7740d0ec1120 82
+  s_f472def30f714e::t_be693796887fbf 4
+  s_f472def30f714e::t_ead5b8178a2aa0 25
+  s_f472def30f714e::t_67cd37e6e3da78 188-189
+  s_f472def30f714e::t_0408b5246e4750 43,45-48
+  s_f472def30f714e::t_10270bfb62b3de 227-233
+dream/dist-web/index.html
+  s_f472def30f714e::t_9448d5f3714540 15
+dream-web/src/env.d.ts
+  s_f472def30f714e::t_f510e6bcbde1b3 60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "58634355c1632f7d35486179f5330eeea4bbc17a",
+  "prompts": {},
+  "sessions": {
+    "s_22a760f35699ec": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e91571b7ffeaXf3lKFbVO4SDk",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    },
+    "s_35a9999416f564": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1e5b39d03ffeCTxgiq9lGz1bFi",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    },
+    "s_f472def30f714e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1f42258d9ffe684Mu5JcrH4pEM",
+        "model": "unknown"
+      },
+      "human_author": "smallBig <1453861318@qq.com>"
+    }
+  }
+}
