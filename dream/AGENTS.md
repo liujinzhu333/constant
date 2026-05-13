@@ -1,6 +1,6 @@
 # Dream — AI Agent 协作指南
 
-> 最后更新：2026-05-09（设置页「Chrome 插件」改名为「服务地址」，支持所有 Web 项目访问）
+> 最后更新：2026-05-13（打卡模块重设计、HTTP Server PATCH 修复、离线同步改进）
 
 ## 项目概述
 
@@ -9,7 +9,7 @@ Dream 是一个基于 **Electron + Vue 3 + Vite + TypeScript** 的跨端个人�
 
 - **平台支持**：macOS 10.12+（arm64）、Windows 10+
 - **Electron 版本**：29.x
-- **当前版本**：1.0.1
+- **当前版本**：1.0.4
 - **数据目录**：
   - macOS 生产：`~/Library/Application Support/dream/`
   - macOS 开发：`~/Library/Application Support/dream-dev/`（与生产隔离，防止争抢单例锁）
@@ -28,11 +28,12 @@ dream/
 │   └── modules/
 │       ├── startup/index.ts      # 启动模块：单例锁、窗口创建、业务包加载
 │       ├── logger/index.ts       # 日志模块：按天轮转，保留 30 天，支持读取/删除接口
-│       ├── storage/index.ts      # SQLite3 存储：AES-256 加密，WAL 模式
+│       ├── storage/index.ts      # SQLite3 存储：AES-256 加密，WAL 模式，含数据库迁移守卫
 │       ├── updater/index.ts      # 整包更新：electron-updater + GitHub Releases，semver 比较
 │       ├── system/index.ts       # 系统适配：窗口/托盘/快捷键/系统通知
 │       ├── ipc/index.ts          # IPC 通信中心（注册所有处理器，含日志管理 handler）
-│       └── business/index.ts     # 所有业务 IPC 处理器（Todo/Study/Note/Schedule/Reminder/Account/Favorite）
+│       ├── business/index.ts     # 所有业务 IPC 处理器（Todo/Study/Note/Schedule/Reminder/Account/Favorite）
+│       └── http-server/index.ts  # HTTP REST Server（供 dream-web 访问，端口 45678/45679）
 ├── src/                          # 渲染进程（浏览器环境）
 │   ├── main.ts                   # Vue 入口，注册 dayjs 插件，全量导入 Element Plus
 │   ├── App.vue
@@ -42,7 +43,7 @@ dream/
 │   │   └── useDebounce.ts        # 防抖工具（trigger/flush/cancel）
 │   ├── stores/
 │   │   ├── todo.ts               # 待办 Store（Pinia）
-│   │   ├── study.ts              # 计划 Store（含子计划 state/actions）
+│   │   ├── study.ts              # 计划 Store（含子计划、打卡 state/actions）
 │   │   ├── note.ts               # 笔记 Store（saveNote 不回写 content，防光标跳位）
 │   │   ├── schedule.ts           # 日程 Store（dayjs 月历）
 │   │   ├── account.ts            # 账号 Store（密钥内存持有，AES 加解密）
@@ -57,6 +58,7 @@ dream/
 │       ├── reminder/ReminderView.vue  # 提醒中心视图
 │       ├── account/AccountView.vue   # 账号管理视图（锁屏/分类导航/卡片列表）
 │       └── favorite/FavoriteView.vue  # 收藏视图（链接/名言卡片，置顶/标签/分类导航）
+├── dist-web/                     # dream-web 构建产物（由 sync-web 脚本自动同步）
 ├── docs/
 │   ├── base-review.md            # 基座代码 Review 问题清单（待修复）
 │   └── roadmap.md                # 业务包热更新规划
@@ -75,11 +77,12 @@ dream/
 # 安装依赖（自动触发 better-sqlite3 针对 Electron 的重编译）
 npm install
 
-# 开发模式（vite-plugin-electron 自动拉起 Electron）
-# userData 自动隔离到 dream-dev/，与线上版本互不干扰
+# 开发模式（需先启动 dream-web dev server，再启动 Electron）
+# 1. 在 dream-web/ 目录：npm run dev
+# 2. 在 dream/ 目录：
 npm run electron:dev
 
-# 生产打包（仅 macOS）
+# 生产打包（自动先构建 dream-web，再打包 Electron，仅 macOS）
 npm run build:mac
 
 # 生产打包（仅 Windows）
@@ -105,6 +108,23 @@ npx tsc --noEmit
 - 渲染进程**不能**直接 `require('electron')`，必须通过 `window.dreamAPI.xxx` 调用
 - IPC channel 命名规范：`模块:操作`，例如 `todo:list`、`log:readFile`
 - **IPC 序列化规则**：传递给 IPC 的对象必须是普通 JS 对象，Vue 响应式 `Proxy` 无法被结构化克隆。在 store action 中调用 IPC 前，务必用 `JSON.parse(JSON.stringify(data))` 或展开运算符解除响应式。
+
+### HTTP Server（供 dream-web 访问）
+
+- 端口：生产 `45678`，开发 `45679`（开发时 dream-web vite proxy 转发到 45679）
+- 入口：`electron/modules/http-server/index.ts`
+- 开发模式随 Electron 自动启动，生产模式需在设置页手动启动
+- **PATCH 路由注意**：`Object.values(safe)` 传给 `better-sqlite3` 前必须把 `undefined` 转为 `null`，否则报 `ERR_INVALID_ARG_TYPE`：
+  ```ts
+  const vals = Object.values(safe).map(v => v === undefined ? null : v)
+  db.prepare(`UPDATE ... SET ${sets} WHERE id=?`).run(...vals, now(), id)
+  ```
+
+### 数据库迁移守卫
+
+- 新增字段必须在 `storage/index.ts` 的 `initDatabase()` 里用 `PRAGMA table_info` 检测并 `ALTER TABLE ADD COLUMN`
+- 迁移守卫只在应用**重启**时执行，修改代码后必须重启应用才能生效
+- 当前已迁移字段：`study_plans.category`、`study_plans.parent_id`、`study_plans.checkin_enabled`、`study_plans.checkin_goal`、`study_plans.checkin_target_days`、`accounts.category`
 
 ### 开发 / 生产环境隔离
 
@@ -158,7 +178,7 @@ const localContent = ref('')
 ### macOS 已知问题
 
 - Electron 29 + macOS GPU 进程崩溃：已在主进程添加 `app.commandLine.appendSwitch('--disable-gpu')` 规避
-- 启动耗时参考值：~1500ms
+- 启动耗时参考值：~1300ms
 
 ### Element Plus 按钮间距陷阱
 
@@ -186,6 +206,13 @@ const localContent = ref('')
 - 支持**子计划**：`study_plans.parent_id` 字段，`study:subPlanList` IPC
 - 支持**编辑**：新建/编辑/新建子计划/编辑子计划统一复用弹窗（`planDialogMode` 区分）
 - 进度自动同步：任务完成后前端 `syncProgress()` 本地更新，主进程 `syncPlanProgress()` 写库
+- **打卡模块**（可选，每个计划独立开关）：
+  - `study_plans` 新增字段：`checkin_enabled`、`checkin_goal`、`checkin_target_days`
+  - 打卡为**全自动**：当日任务全部完成 → 自动写入打卡记录；有任务未完成 → 自动撤销当日打卡
+  - IPC 端：`taskDone`/`taskUndone` 调用 `tryAutoCheckin`/`tryRemoveAutoCheckin`
+  - HTTP 端：`PATCH /api/study/tasks/:id` 状态变更时同样触发自动打卡逻辑
+  - 打卡记录只读展示：热力图 + 连续天数 + 今日状态徽章，无手动打卡按钮
+  - `checkinList` IPC：`study:checkinList(planId, months)`
 
 ### 笔记（Note）
 
@@ -268,7 +295,7 @@ const localContent = ref('')
 # 1. 修改版本号
 # dream/package.json → "version": "x.x.x"
 
-# 2. 打包
+# 2. 打包（自动先构建 dream-web 再打包 Electron）
 npm run build:mac
 
 # 3. 将 release/ 下所有文件上传到 GitHub Release（tag: vx.x.x）
@@ -299,12 +326,14 @@ window.dreamAPI = {
   updater:  { check, download, install, getStatus, rollback, onStatus, onProgress, onError },
   notification: { send },
   todo:     { list, add, update, done, undone, delete },
-  study:    { planList, planAdd, planUpdate, planDelete, subPlanList, taskList, taskAdd, taskDone, taskUndone, taskDelete },
+  study:    { planList, planAdd, planUpdate, planDelete, subPlanList,
+              taskList, taskAdd, taskDone, taskUndone, taskDelete,
+              checkinList },
   note:     { list, get, add, update, delete },
   schedule: { list, add, update, delete },
   reminder: { list, add, dismiss, snooze, delete },
   account:  { list, add, update, delete },
-  favorite:   { list, add, update, pin, delete },
+  favorite: { list, add, update, pin, delete },
   httpServer: { start, stop, status },
 }
 ```
