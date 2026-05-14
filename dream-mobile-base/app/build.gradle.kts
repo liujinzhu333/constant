@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.dream.mobile"
-        minSdk = 28          // Android 9+，对标技术方案
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -41,13 +41,6 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
-    // 打包时将 H5 资源纳入 assets/www/
-    sourceSets {
-        getByName("main") {
-            assets.srcDirs("src/main/assets")
-        }
-    }
 }
 
 dependencies {
@@ -55,7 +48,4 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
-    implementation(libs.androidx.biometric)
-    implementation(libs.kotlinx.coroutines.android)
-    // org.json 在 Android SDK 中已内置，无需额外声明
 }

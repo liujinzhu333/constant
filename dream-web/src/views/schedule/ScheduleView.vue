@@ -22,7 +22,7 @@
             'selected': cell.isSelected,
             'has-event': cell.hasEvent
           }"
-          @click="cell.current && store.selectDate(cell.date)"
+          @click="cell.current && handleSelectDate(cell.date)"
         >
           <span class="day-num">{{ cell.date.date() }}</span>
           <span v-if="cell.hasEvent" class="event-dot" />
@@ -38,21 +38,71 @@
       </div>
 
       <div class="event-list">
-        <div v-for="s in store.todaySchedules" :key="s.id" class="event-item" :style="{ borderLeftColor: s.color }">
-          <div class="event-info">
-            <div class="event-title">{{ s.title }}</div>
-            <el-text size="small" type="info">
-              <template v-if="s.all_day">全天</template>
-              <template v-else>{{ formatTime(s.start_at) }} – {{ formatTime(s.end_at) }}</template>
-            </el-text>
-            <div class="event-note" v-if="s.note">{{ s.note }}</div>
-          </div>
-          <el-button link type="danger" size="small" @click="store.remove(s.id)">
-            <el-icon><Close /></el-icon>
-          </el-button>
-        </div>
+        <template v-for="item in store.todayItems" :key="item.id">
 
-        <el-empty v-if="store.todaySchedules.length === 0" description="当天没有日程" :image-size="60" />
+          <!-- 普通日程 -->
+          <div v-if="item.source === 'schedule'" class="event-item" :style="{ borderLeftColor: item.color }">
+            <div class="event-info">
+              <div class="event-title">{{ item.title }}</div>
+              <el-text size="small" type="info">
+                <template v-if="item.all_day">全天</template>
+                <template v-else>{{ formatTime(item.start_at!) }} – {{ formatTime(item.end_at!) }}</template>
+              </el-text>
+              <div class="event-note" v-if="item.note">{{ item.note }}</div>
+            </div>
+            <el-button link type="danger" size="small" @click="store.remove(item.id)">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
+
+          <!-- 待办（未完成 / 已完成） -->
+          <div
+            v-else-if="item.source === 'todo'"
+            class="event-item event-item--todo"
+            :class="{ 'event-item--done': item.todoDone, 'event-item--overdue': item.todoOverdue }"
+            :style="{ borderLeftColor: item.color }"
+          >
+            <el-checkbox
+              :model-value="item.todoDone"
+              :disabled="item.todoDone"
+              @change="!item.todoDone && toggleTodo(item.todoId!)"
+              style="flex-shrink:0;margin-top:2px"
+            />
+            <div class="event-info">
+              <div class="event-title" :class="{ 'line-through': item.todoDone }">{{ item.title }}</div>
+              <div class="todo-tags" style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <el-tag size="small" :type="item.todoDone ? 'info' : 'warning'">
+                  {{ item.todoDone ? '已完成' : '待办' }}
+                </el-tag>
+                <el-tag v-if="item.todoOverdue" size="small" type="danger">
+                  已逾期
+                </el-tag>
+              </div>
+              <div class="event-note" v-if="item.note">{{ item.note }}</div>
+            </div>
+          </div>
+
+          <!-- 计划任务 -->
+          <div
+            v-else-if="item.source === 'task'"
+            class="event-item event-item--task"
+            :class="{ 'event-item--done': item.taskDone }"
+            :style="{ borderLeftColor: item.color }"
+          >
+            <el-checkbox
+              :model-value="item.taskDone"
+              @change="togglePlanTask(item.taskId!, item.planId!, !!item.taskDone)"
+              style="flex-shrink:0;margin-top:2px"
+            />
+            <div class="event-info">
+              <div class="event-title" :class="{ 'line-through': item.taskDone }">{{ item.title }}</div>
+              <el-tag size="small" type="success" style="margin-top:4px">{{ item.planTitle }}</el-tag>
+            </div>
+          </div>
+
+        </template>
+
+        <el-empty v-if="store.todayItems.length === 0" description="当天没有日程" :image-size="60" />
       </div>
     </div>
 
@@ -94,9 +144,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useScheduleStore } from '../../stores/schedule'
+import { useTodoStore } from '../../stores/todo'
+import { useStudyStore } from '../../stores/study'
 import dayjs from 'dayjs'
 
 const store = useScheduleStore()
+const todoStore = useTodoStore()
+const studyStore = useStudyStore()
 const showAdd = ref(false)
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const colors = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#5ac8fa']
@@ -106,7 +160,20 @@ const form = reactive({
   title: '', note: '', start: '', end: '', allDay: false, color: '#0071e3'
 })
 
-onMounted(() => store.loadMonth())
+onMounted(async () => {
+  // 并行加载：日程 + 待办 + 计划（供聚合展示）
+  await Promise.all([
+    store.loadMonth(),
+    todoStore.load(),
+    studyStore.loadPlans(),
+  ])
+  // 计划加载完后再拉任务（依赖 studyStore.plans）
+  await store.loadCheckinPlanTasks()
+})
+
+async function handleSelectDate(date: dayjs.Dayjs) {
+  await store.selectDate(date)
+}
 
 const selectedLabel = computed(() => {
   const d = store.selectedDate
@@ -139,6 +206,14 @@ const calendarCells = computed(() => {
 
 function formatTime(ts: number) {
   return dayjs.unix(ts).format('HH:mm')
+}
+
+async function toggleTodo(id: string) {
+  await todoStore.toggleDone(id)
+}
+
+async function togglePlanTask(taskId: string, planId: string, currentDone: boolean) {
+  await store.togglePlanTask(taskId, planId, currentDone)
 }
 
 async function submit() {
@@ -189,9 +264,17 @@ async function submit() {
   background: var(--color-bg-card); border: 1px solid var(--color-border);
   border-left-width: 4px; border-radius: var(--radius-md); padding: 12px 14px;
 }
+.event-item--done {
+  opacity: 0.6;
+}
+.event-item--overdue {
+  background: rgba(255, 59, 48, 0.06);
+}
 .event-info { flex: 1; min-width: 0; }
 .event-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
+.event-title.line-through { text-decoration: line-through; color: var(--color-text-muted); }
 .event-note { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
+
 
 .color-picker { display: flex; gap: 6px; }
 .color-dot { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; transition: transform 150ms; }

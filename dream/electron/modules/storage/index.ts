@@ -261,6 +261,12 @@ export class StorageManager {
         this.db!.exec("ALTER TABLE study_plans ADD COLUMN checkin_target_days INTEGER DEFAULT 0")
       }
 
+      // 数据迁移：study_tasks 表新增 last_done_date 字段（用于按天重置完成状态）
+      const taskCols = (this.db!.prepare("PRAGMA table_info(study_tasks)").all() as Array<{ name: string }>).map(c => c.name)
+      if (!taskCols.includes('last_done_date')) {
+        this.db!.exec("ALTER TABLE study_tasks ADD COLUMN last_done_date TEXT DEFAULT NULL")
+      }
+
       // 数据迁移：accounts 表新增 category 字段
       const accountCols = (this.db!.prepare("PRAGMA table_info(accounts)").all() as Array<{ name: string }>).map(c => c.name)
       if (!accountCols.includes('category')) {

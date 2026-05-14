@@ -155,7 +155,10 @@ export class BusinessIpc {
     })
 
     ipcMain.handle('study:taskList', (_e, planId: string) => {
-      return this.db.prepare('SELECT * FROM study_tasks WHERE plan_id = ? ORDER BY sort_order ASC, created_at ASC').all(planId)
+      const today = new Date().toISOString().slice(0, 10)
+      const rows = this.db.prepare('SELECT * FROM study_tasks WHERE plan_id = ? ORDER BY sort_order ASC, created_at ASC').all(planId) as Array<Record<string, unknown>>
+      // 若任务上次完成日期不是今天，视为今日未完成（按天重置，不写库）
+      return rows.map(t => t.last_done_date === today ? t : { ...t, status: 'todo' })
     })
 
     ipcMain.handle('study:taskAdd', (_e, planId: string, data: { title: string; due_at?: number }) => {
@@ -170,14 +173,15 @@ export class BusinessIpc {
     })
 
     ipcMain.handle('study:taskDone', (_e, id: string, planId: string) => {
-      this.db.prepare(`UPDATE study_tasks SET status = 'done', updated_at = ? WHERE id = ?`).run(now(), id)
+      const today = new Date().toISOString().slice(0, 10)
+      this.db.prepare(`UPDATE study_tasks SET status = 'done', last_done_date = ?, updated_at = ? WHERE id = ?`).run(today, now(), id)
       this.syncPlanProgress(planId)
       this.tryAutoCheckin(planId)
       return true
     })
 
     ipcMain.handle('study:taskUndone', (_e, id: string, planId: string) => {
-      this.db.prepare(`UPDATE study_tasks SET status = 'todo', updated_at = ? WHERE id = ?`).run(now(), id)
+      this.db.prepare(`UPDATE study_tasks SET status = 'todo', last_done_date = NULL, updated_at = ? WHERE id = ?`).run(now(), id)
       this.syncPlanProgress(planId)
       // 当日任务不再全部完成，移除今日自动打卡
       this.tryRemoveAutoCheckin(planId)
@@ -192,8 +196,10 @@ export class BusinessIpc {
   }
 
   private syncPlanProgress(planId: string) {
+    const today = new Date().toISOString().slice(0, 10)
     const total = (this.db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ?').get(planId) as { c: number }).c
-    const done = (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'done'").get(planId) as { c: number }).c
+    // 只统计今天完成的任务（按天重置语义）
+    const done = (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'done' AND last_done_date = ?").get(planId, today) as { c: number }).c
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
     this.db.prepare('UPDATE study_plans SET progress = ?, updated_at = ? WHERE id = ?').run(progress, now(), planId)
   }
@@ -206,10 +212,13 @@ export class BusinessIpc {
     const total = (this.db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ?').get(planId) as { c: number }).c
     if (total === 0) return // 没有任务时不自动打卡
 
-    const todo = (this.db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND status = 'todo'").get(planId) as { c: number }).c
-    if (todo > 0) return // 还有未完成任务
-
     const today = new Date().toISOString().slice(0, 10)
+    // 未完成 = status='todo' 或 last_done_date 不是今天（按天重置语义）
+    const notDoneToday = (this.db.prepare(
+      "SELECT COUNT(*) as c FROM study_tasks WHERE plan_id = ? AND (status = 'todo' OR last_done_date IS NULL OR last_done_date != ?)"
+    ).get(planId, today) as { c: number }).c
+    if (notDoneToday > 0) return // 还有今日未完成任务
+
     const exists = this.db.prepare('SELECT id FROM study_checkins WHERE plan_id = ? AND date = ?').get(planId, today)
     if (exists) return // 今日已打卡
 

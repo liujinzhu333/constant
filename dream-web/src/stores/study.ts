@@ -250,7 +250,7 @@ export const useStudyStore = defineStore('study', () => {
       (tempId) => ({
         id: tempId, plan_id: planId,
         title, status: 'todo' as const, due_at: due_at ?? null,
-        sort_order: tasks.value.length + 1, created_at: t, updated_at: t,
+        sort_order: tasks.value.length + 1, last_done_date: null, created_at: t, updated_at: t,
       }),
     )
     tasks.value.push(task)
@@ -275,9 +275,10 @@ export const useStudyStore = defineStore('study', () => {
     const planId = currentPlan.value.id
     // 在 syncProgress 替换 currentPlan.value 之前，先把打卡开关状态保存下来
     const checkinEnabled = !!currentPlan.value.checkin_enabled
+    const today = new Date().toISOString().slice(0, 10)
     const patch = task.status === 'todo'
-      ? { status: 'done' as const }
-      : { status: 'todo' as const }
+      ? { status: 'done' as const, last_done_date: today }
+      : { status: 'todo' as const, last_done_date: null as string | null }
     await offlinePatch<StudyTask>(`/api/study/tasks/${task.id}`, patch, task)
     // 乐观更新内存（用 map 替换，保证 Vue 响应式追踪）
     const idx = tasks.value.findIndex(t => t.id === task.id)
@@ -293,8 +294,8 @@ export const useStudyStore = defineStore('study', () => {
     // 若计划开启打卡，在本地直接判断是否需要自动打卡/撤卡
     // 离线时后端不会执行 tryAutoCheckin，需前端自己维护 checkins
     if (checkinEnabled) {
-      const today = new Date().toISOString().slice(0, 10)
-      const allDone = tasks.value.length > 0 && tasks.value.every(t => t.status === 'done')
+      // 按天重置语义：只有 last_done_date === today 的才算今日完成
+      const allDone = tasks.value.length > 0 && tasks.value.every(t => t.last_done_date === today)
       const alreadyChecked = checkins.value.some(c => c.date === today)
       if (allDone && !alreadyChecked) {
         checkins.value = [...checkins.value, { id: `local_${today}`, plan_id: planId, date: today, note: '', created_at: Math.floor(Date.now() / 1000) }]
@@ -328,7 +329,7 @@ export const useStudyStore = defineStore('study', () => {
       (tempId) => ({
         id: tempId, plan_id: planId,
         title, status: 'todo' as const, due_at: due_at ?? null,
-        sort_order: subTasks.value.length + 1, created_at: t, updated_at: t,
+        sort_order: subTasks.value.length + 1, last_done_date: null, created_at: t, updated_at: t,
       }),
     )
     subTasks.value.push(task)
@@ -406,6 +407,38 @@ export const useStudyStore = defineStore('study', () => {
     }
   }
 
+  /**
+   * 不依赖 currentPlan，直接按 taskId + planId 切换任务完成状态。
+   * 供日程页等场景使用，完成后返回更新后的任务对象。
+   */
+  async function toggleTaskById(taskId: string, planId: string, currentDone: boolean): Promise<StudyTask | null> {
+    const today = new Date().toISOString().slice(0, 10)
+    const patch = currentDone
+      ? { status: 'todo' as const, last_done_date: null as string | null }
+      : { status: 'done' as const, last_done_date: today }
+
+    // 构造最小 task 占位（offlinePatch 需要原始对象做乐观合并）
+    const placeholder: StudyTask = {
+      id: taskId, plan_id: planId, title: '', status: currentDone ? 'done' : 'todo',
+      due_at: null, sort_order: 0, last_done_date: currentDone ? today : null,
+      created_at: 0, updated_at: 0,
+    }
+    const updated = await offlinePatch<StudyTask>(`/api/study/tasks/${taskId}`, patch, placeholder)
+
+    // 若 tasks 里恰好有这条（当前计划打开着），一并更新内存
+    const idx = tasks.value.findIndex(t => t.id === taskId)
+    if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], ...patch }
+    const subIdx = subTasks.value.findIndex(t => t.id === taskId)
+    if (subIdx !== -1) subTasks.value[subIdx] = { ...subTasks.value[subIdx], ...patch }
+
+    // 修正缓存
+    const taskCachePath = `/api/study/tasks?plan_id=${planId}`
+    const cached = readCache<StudyTask[]>(taskCachePath) ?? []
+    writeCache(taskCachePath, cached.map(t => t.id === taskId ? { ...t, ...patch } : t))
+
+    return updated ?? null
+  }
+
   // 向 connection store 注册数据刷新回调（重连同步时重载顶层计划列表）
   useConnectionStore().registerRefresh(() => loadPlans())
 
@@ -416,7 +449,7 @@ export const useStudyStore = defineStore('study', () => {
     loadPlans, selectCategory, selectPlan,
     addPlan, updatePlan, deletePlan,
     loadSubPlans, selectSubPlan, addSubPlan, updateSubPlan, deleteSubPlan,
-    addTask, toggleTask, deleteTask,
+    addTask, toggleTask, toggleTaskById, deleteTask,
     addSubTask, toggleSubTask, deleteSubTask,
     loadCheckins, todayChecked, streakDays,
   }

@@ -38,21 +38,49 @@
       </div>
 
       <div class="event-list">
-        <div v-for="s in store.todaySchedules" :key="s.id" class="event-item" :style="{ borderLeftColor: s.color }">
-          <div class="event-info">
-            <div class="event-title">{{ s.title }}</div>
-            <el-text size="small" type="info">
-              <template v-if="s.all_day">全天</template>
-              <template v-else>{{ formatTime(s.start_at) }} – {{ formatTime(s.end_at) }}</template>
-            </el-text>
-            <div class="event-note" v-if="s.note">{{ s.note }}</div>
-          </div>
-          <el-button link type="danger" size="small" @click="store.remove(s.id)">
-            <el-icon><Close /></el-icon>
-          </el-button>
-        </div>
+        <template v-for="item in store.todayItems" :key="item.id">
 
-        <el-empty v-if="store.todaySchedules.length === 0" description="当天没有日程" :image-size="60" />
+          <!-- 普通日程 -->
+          <div v-if="item.source === 'schedule'" class="event-item" :style="{ borderLeftColor: item.color }">
+            <div class="event-info">
+              <div class="event-title">{{ item.title }}</div>
+              <el-text size="small" type="info">
+                <template v-if="item.all_day">全天</template>
+                <template v-else>{{ formatTime(item.start_at!) }} – {{ formatTime(item.end_at!) }}</template>
+              </el-text>
+              <div class="event-note" v-if="item.note">{{ item.note }}</div>
+            </div>
+            <el-button link type="danger" size="small" @click="store.remove(item.id)">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
+
+          <!-- 未完成待办 -->
+          <div v-else-if="item.source === 'todo'" class="event-item event-item--todo" :style="{ borderLeftColor: item.color }">
+            <el-checkbox
+              :model-value="false"
+              @change="toggleTodo(item.todoId!)"
+              style="flex-shrink:0;margin-top:2px"
+            />
+            <div class="event-info">
+              <div class="event-title">{{ item.title }}</div>
+              <el-tag size="small" type="warning" style="margin-top:4px">待办</el-tag>
+              <div class="event-note" v-if="item.note">{{ item.note }}</div>
+            </div>
+          </div>
+
+          <!-- 打卡计划 -->
+          <div v-else-if="item.source === 'checkin'" class="event-item event-item--checkin" :style="{ borderLeftColor: item.color }">
+            <div class="event-info">
+              <div class="event-title">{{ item.title }}</div>
+              <el-tag size="small" type="success" style="margin-top:4px">打卡计划</el-tag>
+              <div class="event-note" v-if="item.note">{{ item.note }}</div>
+            </div>
+          </div>
+
+        </template>
+
+        <el-empty v-if="store.todayItems.length === 0" description="当天没有日程" :image-size="60" />
       </div>
     </div>
 
@@ -94,9 +122,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useScheduleStore } from '../../stores/schedule'
+import { useTodoStore } from '../../stores/todo'
+import { useStudyStore } from '../../stores/study'
 import dayjs from 'dayjs'
 
 const store = useScheduleStore()
+const todoStore = useTodoStore()
+const studyStore = useStudyStore()
 const showAdd = ref(false)
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 const colors = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#5ac8fa']
@@ -105,7 +137,14 @@ const form = reactive({
   title: '', note: '', start: '', end: '', allDay: false, color: '#0071e3'
 })
 
-onMounted(() => store.loadMonth())
+onMounted(async () => {
+  // 并行加载：日程 + 待办 + 计划（供聚合展示）
+  await Promise.all([
+    store.loadMonth(),
+    todoStore.load(),
+    studyStore.loadPlans(),
+  ])
+})
 
 const selectedLabel = computed(() => {
   const d = store.selectedDate
@@ -138,6 +177,10 @@ const calendarCells = computed(() => {
 
 function formatTime(ts: number) {
   return dayjs.unix(ts).format('HH:mm')
+}
+
+async function toggleTodo(id: string) {
+  await todoStore.toggleDone(id)
 }
 
 async function submit() {
@@ -187,6 +230,8 @@ async function submit() {
   background: var(--color-bg-card); border: 1px solid var(--color-border);
   border-left-width: 4px; border-radius: var(--radius-md); padding: 12px 14px;
 }
+.event-item--todo { opacity: 1; }
+.event-item--checkin { opacity: 0.85; }
 .event-info { flex: 1; min-width: 0; }
 .event-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
 .event-note { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }

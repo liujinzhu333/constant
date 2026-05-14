@@ -392,9 +392,11 @@ export class LocalHttpServer {
 
     // GET /api/study/tasks?plan_id=xxx
     if ((m = matchRoute(method, url, '/api/study/tasks', 'GET')).matched) {
-      return json(res, 200,
-        db.prepare('SELECT * FROM study_tasks WHERE plan_id=? ORDER BY sort_order ASC,created_at ASC')
-          .all(query.plan_id ?? ''))
+      const today = new Date().toISOString().slice(0, 10)
+      const rows = db.prepare('SELECT * FROM study_tasks WHERE plan_id=? ORDER BY sort_order ASC,created_at ASC')
+        .all(query.plan_id ?? '') as Array<Record<string, unknown>>
+      // 若任务上次完成日期不是今天，视为今日未完成（按天重置，不写库）
+      return json(res, 200, rows.map(t => t.last_done_date === today ? t : { ...t, status: 'todo' }))
     }
 
     // POST /api/study/tasks
@@ -413,6 +415,11 @@ export class LocalHttpServer {
       const d = await readBody(req)
       const allowed = ['title','status','due_at','sort_order']
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
+      // 状态变更时同步更新 last_done_date（按天重置的核心字段）
+      if ('status' in safe) {
+        const today = new Date().toISOString().slice(0, 10)
+        ;(safe as Record<string, unknown>).last_done_date = (safe as any).status === 'done' ? today : null
+      }
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
         // better-sqlite3 不接受 undefined，统一转为 null
@@ -679,8 +686,10 @@ export class LocalHttpServer {
   // ─── 辅助 ────────────────────────────────────────────────────
 
   private syncPlanProgress(db: ReturnType<StorageManager['getDb']>, planId: string) {
+    const today = new Date().toISOString().slice(0, 10)
     const total = (db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=?').get(planId) as any).c
-    const done  = (db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND status='done'").get(planId) as any).c
+    // 只统计今天完成的任务（按天重置语义）
+    const done  = (db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND status='done' AND last_done_date=?").get(planId, today) as any).c
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
     db.prepare('UPDATE study_plans SET progress=?,updated_at=? WHERE id=?').run(progress, now(), planId)
   }
@@ -690,9 +699,12 @@ export class LocalHttpServer {
     if (!plan?.checkin_enabled) return
     const total = (db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=?').get(planId) as any).c
     if (total === 0) return
-    const todo = (db.prepare("SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND status='todo'").get(planId) as any).c
-    if (todo > 0) return
     const today = new Date().toISOString().slice(0, 10)
+    // 未完成 = status='todo' 或 last_done_date 不是今天（按天重置语义）
+    const notDoneToday = (db.prepare(
+      "SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND (status='todo' OR last_done_date IS NULL OR last_done_date!=?)"
+    ).get(planId, today) as any).c
+    if (notDoneToday > 0) return
     const exists = db.prepare('SELECT id FROM study_checkins WHERE plan_id=? AND date=?').get(planId, today)
     if (exists) return
     try {

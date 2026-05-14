@@ -297,6 +297,7 @@ export interface StudyTask {
   status: 'todo' | 'done'
   due_at: number | null
   sort_order: number
+  last_done_date: string | null  // YYYY-MM-DD，用于按天重置完成状态
   created_at: number
   updated_at: number
 }

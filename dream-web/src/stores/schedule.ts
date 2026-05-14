@@ -1,10 +1,35 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { scheduleApi, offlinePost, offlinePatch, offlineDelete, type Schedule } from '../utils/api'
+import { scheduleApi, studyApi, offlinePost, offlinePatch, offlineDelete, type Schedule, type StudyPlan, type StudyTask } from '../utils/api'
 import { useConnectionStore } from './connection'
+import { useTodoStore } from './todo'
+import { useStudyStore } from './study'
 import dayjs from 'dayjs'
 
 export type { Schedule }
+
+/** 日程面板展示的统一条目类型 */
+export interface DayItem {
+  id: string
+  title: string
+  note?: string
+  color: string
+  /** schedule: 普通日程 | todo: 待办 | task: 计划任务 */
+  source: 'schedule' | 'todo' | 'task'
+  // schedule 专属
+  all_day?: number
+  start_at?: number
+  end_at?: number
+  // todo 专属
+  todoId?: string
+  todoDone?: boolean     // true = 已完成
+  todoOverdue?: boolean  // true = 已超过截止日期且未完成
+  // task 专属
+  taskId?: string
+  taskDone?: boolean   // true = 今日已完成
+  planId?: string      // 所属计划 id
+  planTitle?: string   // 所属计划名称
+}
 
 const now = () => Math.floor(Date.now() / 1000)
 
@@ -14,21 +39,142 @@ export const useScheduleStore = defineStore('schedule', () => {
   const selectedDate = ref(dayjs().startOf('day'))
   const loading = ref(false)
 
+  // 计划任务缓存：planId → 任务列表（用普通对象而非 Map，确保 Vue computed 能追踪属性变化）
+  const planTasksMap = ref<Record<string, StudyTask[]>>({})
+  // 当前日期展示的计划列表（只加载有打卡的顶层计划）
+  const checkinPlans = ref<StudyPlan[]>([])
+
   const monthLabel = computed(() => currentMonth.value.format('YYYY年MM月'))
 
+  // -------- 聚合：普通日程（当日范围内）--------
   const todaySchedules = computed(() => {
     const start = selectedDate.value.unix()
     const end = selectedDate.value.endOf('day').unix()
-    return schedules.value.filter(s => s.start_at <= end && s.end_at >= start)
+    return schedules.value
+      .filter(s => s.start_at <= end && s.end_at >= start)
       .sort((a, b) => a.start_at - b.start_at)
   })
 
+  // -------- 聚合：当日所有展示条目 --------
+  const todayItems = computed<DayItem[]>(() => {
+    const items: DayItem[] = []
+    const selectedStr = selectedDate.value.format('YYYY-MM-DD')
+    const isToday = selectedDate.value.isToday()
+    const isFuture = selectedDate.value.isAfter(dayjs().startOf('day'))
+
+    // 1. 普通日程
+    for (const s of todaySchedules.value) {
+      items.push({
+        id: s.id,
+        title: s.title,
+        note: s.note,
+        color: s.color ?? '#0071e3',
+        source: 'schedule',
+        all_day: s.all_day,
+        start_at: s.start_at,
+        end_at: s.end_at,
+      })
+    }
+
+    // 2. 待办
+    //   - 未完成（有/无截止日期）→ 今天及之后每天展示，直到完成；超过截止日期标红
+    //   - 已完成 → 仅在 done_at 当天展示
+    const todoStore = useTodoStore()
+    const todayStr = dayjs().format('YYYY-MM-DD')
+    for (const t of todoStore.items) {
+      if (t.status === 'todo') {
+        // 未完成：只在今天及以后展示（不展示历史日期）
+        if (!isToday && !isFuture) continue
+        const overdue = !!(t.due_at && dayjs.unix(t.due_at).format('YYYY-MM-DD') < todayStr)
+        items.push({
+          id: `todo-${t.id}`,
+          title: t.title,
+          note: t.note || undefined,
+          color: overdue ? '#ff3b30' : '#ff9f0a',
+          source: 'todo',
+          todoId: t.id,
+          todoDone: false,
+          todoOverdue: overdue,
+        })
+      } else {
+        // 已完成：仅在 done_at 当天展示
+        if (t.done_at && dayjs.unix(t.done_at).format('YYYY-MM-DD') === selectedStr) {
+          items.push({
+            id: `todo-done-${t.id}`,
+            title: t.title,
+            note: t.note || undefined,
+            color: '#8e8e93',
+            source: 'todo',
+            todoId: t.id,
+            todoDone: true,
+          })
+        }
+      }
+    }
+
+    // 3. 计划任务（开启打卡的顶层计划下的所有任务）
+    //   - 今天/未来：展示所有任务，完成状态 = last_done_date === selectedStr
+    //   - 历史日期：只展示 last_done_date === selectedStr 的（那天已完成的）
+    for (const plan of checkinPlans.value) {
+      const tasks = planTasksMap.value[plan.id] ?? []
+      for (const task of tasks) {
+        const doneToday = task.last_done_date === selectedStr
+        // 历史日期只展示当天完成的任务
+        if (!isToday && !isFuture && !doneToday) continue
+        items.push({
+          id: `task-${task.id}`,
+          title: task.title,
+          color: plan.color ?? '#34c759',
+          source: 'task',
+          taskId: task.id,
+          taskDone: doneToday,
+          planId: plan.id,
+          planTitle: plan.title,
+        })
+      }
+    }
+
+    // 未完成在前，已完成在后；同类内保持原有顺序
+    return items.sort((a, b) => {
+      const aDone = !!(a.todoDone || a.taskDone)
+      const bDone = !!(b.todoDone || b.taskDone)
+      if (aDone === bDone) return 0
+      return aDone ? 1 : -1
+    })
+  })
+
+  // -------- 日历标记 --------
   const markedDays = computed(() => {
     const set = new Set<string>()
-    schedules.value.forEach(s => {
-      const d = dayjs.unix(s.start_at).format('YYYY-MM-DD')
-      set.add(d)
-    })
+
+    // 普通日程
+    for (const s of schedules.value) {
+      set.add(dayjs.unix(s.start_at).format('YYYY-MM-DD'))
+    }
+
+    // 待办：未完成有截止日期打点；已完成在 done_at 打点
+    const todoStore = useTodoStore()
+    for (const t of todoStore.items) {
+      if (t.status === 'todo' && t.due_at) {
+        set.add(dayjs.unix(t.due_at).format('YYYY-MM-DD'))
+      } else if (t.status === 'done' && t.done_at) {
+        set.add(dayjs.unix(t.done_at).format('YYYY-MM-DD'))
+      }
+    }
+
+    // 无截止日期的未完成待办 → 今天打点
+    const hasNoDueTodo = todoStore.items.some(t => t.status === 'todo' && !t.due_at)
+    if (hasNoDueTodo) {
+      set.add(dayjs().format('YYYY-MM-DD'))
+    }
+
+    // 有打卡计划 → 今天打点
+    const studyStore = useStudyStore()
+    const hasCheckinPlan = studyStore.plans.some(p => p.checkin_enabled)
+    if (hasCheckinPlan) {
+      set.add(dayjs().format('YYYY-MM-DD'))
+    }
+
     return set
   })
 
@@ -43,6 +189,22 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
+  /** 加载所有开启打卡的顶层计划及其任务（切换日期时调用） */
+  async function loadCheckinPlanTasks() {
+    const studyStore = useStudyStore()
+    // 确保计划列表已加载
+    if (studyStore.plans.length === 0) {
+      await studyStore.loadPlans()
+    }
+    const plans = studyStore.plans.filter(p => p.checkin_enabled && !p.parent_id)
+    checkinPlans.value = plans
+    // 并行拉取每个计划的任务
+    const results = await Promise.all(plans.map(p => studyApi.taskList(p.id)))
+    const record: Record<string, StudyTask[]> = {}
+    plans.forEach((p, i) => { record[p.id] = results[i] })
+    planTasksMap.value = record
+  }
+
   async function prevMonth() {
     currentMonth.value = currentMonth.value.subtract(1, 'month')
     await loadMonth()
@@ -53,8 +215,10 @@ export const useScheduleStore = defineStore('schedule', () => {
     await loadMonth()
   }
 
-  function selectDate(date: dayjs.Dayjs) {
+  async function selectDate(date: dayjs.Dayjs) {
     selectedDate.value = date.startOf('day')
+    // 切换日期时刷新计划任务（任务完成状态按日期判断）
+    await loadCheckinPlanTasks()
   }
 
   async function add(data: {
@@ -64,7 +228,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     const t = now()
     const s = await offlinePost<Schedule>(
       '/api/schedules',
-      { ...data, start_at: data.start_at * 1000, end_at: data.end_at * 1000 },
+      { ...data },
       (tempId) => ({
         id: tempId, title: data.title, note: data.note ?? '',
         start_at: data.start_at, end_at: data.end_at,
@@ -95,8 +259,22 @@ export const useScheduleStore = defineStore('schedule', () => {
     schedules.value = schedules.value.filter(s => s.id !== id)
   }
 
+  /** 日程页直接切换计划任务完成状态，完成后重新拉取任务列表刷新界面 */
+  async function togglePlanTask(taskId: string, planId: string, currentDone: boolean) {
+    const studyStore = useStudyStore()
+    await studyStore.toggleTaskById(taskId, planId, currentDone)
+    // 直接重新拉取该计划的任务列表，确保 planTasksMap 被完整替换触发响应式更新
+    const tasks = await studyApi.taskList(planId)
+    planTasksMap.value = { ...planTasksMap.value, [planId]: tasks }
+  }
+
   // 向 connection store 注册数据刷新回调（重连同步时重载当前月份日程）
   useConnectionStore().registerRefresh(() => loadMonth())
 
-  return { schedules, currentMonth, selectedDate, monthLabel, todaySchedules, markedDays, loadMonth, prevMonth, nextMonth, selectDate, add, update, remove }
+  return {
+    schedules, currentMonth, selectedDate, monthLabel,
+    todaySchedules, todayItems, markedDays,
+    loadMonth, loadCheckinPlanTasks, prevMonth, nextMonth, selectDate,
+    add, update, remove, togglePlanTask,
+  }
 })
