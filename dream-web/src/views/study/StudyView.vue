@@ -36,8 +36,10 @@
                 {{ catIconOf(plan.category) }}
               </span>
             </div>
-            <el-text size="small" type="info">{{ plan.doneCount }}/{{ plan.taskCount }} 任务 · {{ plan.progress }}%</el-text>
-            <el-text v-if="plan.subPlanCount" size="small" type="info" style="margin-left:6px">· {{ plan.subPlanCount }} 子计划</el-text>
+            <el-text size="small" type="info">
+              {{ plan.doneCount }}/{{ plan.taskCount }} 任务 · {{ plan.progress }}%
+              <template v-if="plan.subPlanCount"> · {{ plan.subPlanCount }} 子计划</template>
+            </el-text>
             <el-progress :percentage="plan.progress" :color="plan.color" :show-text="false" :stroke-width="3" style="margin-top:5px" />
           </div>
           <div class="plan-card-actions">
