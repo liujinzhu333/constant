@@ -44,9 +44,17 @@
             v-for="item in filtered.filter(i => i.type === 'link')"
             :key="item.id"
             class="fav-card link-card"
-            @click.self="toggleExpand(item.id)"
+            @click="toggleExpand(item.id)"
           >
-            <div class="card-top" @click="toggleExpand(item.id)">
+            <!-- 标题（单行截断） -->
+            <div class="card-title">{{ item.title || item.url }}</div>
+            <!-- 展开后才显示 URL 和来源 -->
+            <template v-if="expandedIds.has(item.id)">
+              <div class="card-url" @click.stop="openUrl(item.url)">{{ item.url }}</div>
+              <div v-if="item.author" class="card-author">— {{ item.author }}</div>
+            </template>
+            <!-- 底部一行：左侧 meta，右侧操作 -->
+            <div class="card-bottom" @click.stop>
               <div class="card-meta">
                 <el-icon v-if="item.is_pinned" class="pin-icon"><StarFilled /></el-icon>
                 <span class="card-type-tag link-tag">链接</span>
@@ -54,7 +62,7 @@
                   <el-tag v-for="t in parseTags(item.tags)" :key="t" size="small" type="info" effect="plain">{{ t }}</el-tag>
                 </div>
               </div>
-              <div class="card-actions" @click.stop>
+              <div class="card-actions">
                 <el-tooltip content="打开链接" placement="top" :show-after="400">
                   <el-button link size="small" :icon="LinkIcon" @click="openUrl(item.url)" />
                 </el-tooltip>
@@ -72,12 +80,6 @@
                 </el-popconfirm>
               </div>
             </div>
-            <div class="card-title" @click="toggleExpand(item.id)">{{ item.title || item.url }}</div>
-            <!-- 展开后才显示 URL 和来源 -->
-            <template v-if="expandedIds.has(item.id)">
-              <div class="card-url" @click.stop="openUrl(item.url)">{{ item.url }}</div>
-              <div v-if="item.author" class="card-author">— {{ item.author }}</div>
-            </template>
           </div>
         </template>
 
@@ -88,7 +90,14 @@
             :key="item.id"
             class="fav-card quote-card"
           >
-            <div class="card-top">
+            <!-- 内容 -->
+            <div class="quote-content">{{ item.content }}</div>
+            <div v-if="item.author || item.title" class="quote-source">
+              <span v-if="item.author">— {{ item.author }}</span>
+              <span v-if="item.title" class="quote-title-ref">《{{ item.title }}》</span>
+            </div>
+            <!-- 底部一行：左侧 meta，右侧操作 -->
+            <div class="card-bottom">
               <div class="card-meta">
                 <el-icon v-if="item.is_pinned" class="pin-icon"><StarFilled /></el-icon>
                 <span class="card-type-tag quote-tag">名言</span>
@@ -110,11 +119,6 @@
                   </template>
                 </el-popconfirm>
               </div>
-            </div>
-            <div class="quote-content">{{ item.content }}</div>
-            <div v-if="item.author || item.title" class="quote-source">
-              <span v-if="item.author">— {{ item.author }}</span>
-              <span v-if="item.title" class="quote-title-ref">《{{ item.title }}》</span>
             </div>
           </div>
         </template>
@@ -523,11 +527,12 @@ onMounted(() => store.load())
 }
 .fav-card:hover { box-shadow: var(--shadow-md); }
 
-.card-top {
+.card-bottom {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 2px;
 }
 .card-meta {
   display: flex;
@@ -535,6 +540,7 @@ onMounted(() => store.load())
   gap: 6px;
   flex-wrap: wrap;
   min-width: 0;
+  flex: 1;
 }
 .pin-icon { color: var(--el-color-warning); font-size: 13px; flex-shrink: 0; }
 
@@ -549,7 +555,6 @@ onMounted(() => store.load())
 .quote-tag { background: #fff8e1; color: #f57f17; }
 
 .card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-/* 消除 el-tag 相邻 margin */
 .card-tags :deep(.el-tag + .el-tag) { margin-left: 0; }
 
 .card-actions {
@@ -567,7 +572,9 @@ onMounted(() => store.load())
   font-weight: 600;
   color: var(--color-text);
   line-height: 1.4;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card-url {
   font-size: 12px;
