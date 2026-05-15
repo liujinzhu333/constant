@@ -511,6 +511,7 @@ onMounted(() => store.load())
   flex-direction: column;
   gap: 8px;
   transition: box-shadow var(--duration-fast) var(--ease-out);
+  min-width: 0; /* 防止 nowrap 内容撑破 grid 列宽 */
 }
 .fav-card:hover { box-shadow: var(--shadow-md); }
 .fav-card { cursor: pointer; }
