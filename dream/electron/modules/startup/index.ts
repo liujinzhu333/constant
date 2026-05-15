@@ -66,6 +66,7 @@ export class StartupManager {
     const httpServer = LocalHttpServer.getInstance()
     httpServer.setPort(isDev ? PORT_DEV : PORT_PROD)
     httpServer.setAppPath(app.getAppPath())
+    httpServer.setDevMode(isDev)   // 开发模式强制 HTTP，vite proxy 才能正常转发
     if (!isDev) {
       const webRoot = path.join(__dirname, '../../dist-web')
       httpServer.setWebRoot(webRoot)

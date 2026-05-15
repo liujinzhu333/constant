@@ -137,6 +137,8 @@ export class LocalHttpServer {
   private webRoot: string | null = null
   /** app 根目录，用于定位 certs/（由外部注入） */
   private appPath: string = ''
+  /** 开发模式：强制 HTTP，不加载证书（vite proxy 只支持 HTTP 转发） */
+  private devMode: boolean = false
 
   private constructor() {}
 
@@ -152,6 +154,9 @@ export class LocalHttpServer {
 
   /** 注入 app 路径，用于定位证书 */
   setAppPath(p: string) { this.appPath = p }
+
+  /** 开发模式下强制 HTTP（必须在 start() 前调用） */
+  setDevMode(dev: boolean) { this.devMode = dev }
 
   isRunning() { return this.running }
   getPort()   { return this.port }
@@ -188,15 +193,18 @@ export class LocalHttpServer {
       }
     }
 
-    // 尝试加载证书，成功则启 HTTPS，否则降级 HTTP
-    const certs = loadCerts(this.appPath)
+    // 开发模式强制 HTTP（vite proxy 只支持 HTTP 转发，HTTPS 会导致 proxy 502）
+    // 生产模式尝试加载证书，找到则启 HTTPS，否则降级 HTTP
+    const certs = this.devMode ? null : loadCerts(this.appPath)
     if (certs) {
       this.server = https.createServer({ key: certs.key, cert: certs.cert }, handler)
       this.useHttps = true
     } else {
       this.server = http.createServer(handler)
       this.useHttps = false
-      logger.warn('HttpServer', '未找到证书，降级为 HTTP（云端 Web 可能无法访问）')
+      if (!this.devMode) {
+        logger.warn('HttpServer', '未找到证书，降级为 HTTP（云端 Web 可能无法访问）')
+      }
     }
 
     this.server.listen(this.port, '0.0.0.0', () => {
@@ -413,12 +421,18 @@ export class LocalHttpServer {
     // PATCH /api/study/tasks/:id
     if ((m = matchRoute(method, url, '/api/study/tasks/:id', 'PATCH')).matched) {
       const d = await readBody(req)
-      const allowed = ['title','status','due_at','sort_order']
+      const allowed = ['title','status','due_at','sort_order','last_done_date']
       const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       // 状态变更时同步更新 last_done_date（按天重置的核心字段）
-      if ('status' in safe) {
+      // 优先使用客户端传来的 last_done_date（离线场景：操作发生在昨天，同步在今天，日期应为昨天）
+      // 若客户端未传 last_done_date，才回退到服务端当天日期
+      if ('status' in safe && !('last_done_date' in safe)) {
         const today = new Date().toISOString().slice(0, 10)
         ;(safe as Record<string, unknown>).last_done_date = (safe as any).status === 'done' ? today : null
+      }
+      // 若状态为 todo，强制清空 last_done_date（无论客户端传什么）
+      if ('status' in safe && (safe as any).status === 'todo') {
+        ;(safe as Record<string, unknown>).last_done_date = null
       }
       if (Object.keys(safe).length) {
         const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
@@ -433,7 +447,8 @@ export class LocalHttpServer {
         // 状态变更时尝试自动打卡 / 撤销打卡
         if ('status' in safe) {
           if ((safe as any).status === 'done') {
-            this.tryAutoCheckin(db, task.plan_id)
+            // 使用任务实际的 last_done_date 作为打卡日期（支持离线补打卡）
+            this.tryAutoCheckin(db, task.plan_id, task.last_done_date)
           } else {
             this.tryRemoveAutoCheckin(db, task.plan_id)
           }
@@ -465,6 +480,34 @@ export class LocalHttpServer {
       return json(res, 200,
         db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date>=? ORDER BY date ASC')
           .all(query.plan_id, sinceStr))
+    }
+
+    // POST /api/study/checkins — 手动补卡（指定日期）
+    if ((m = matchRoute(method, url, '/api/study/checkins', 'POST')).matched) {
+      const d = await readBody(req)
+      if (!d.plan_id || !d.date) return json(res, 400, { error: 'plan_id and date required' })
+      // 验证计划存在且开启打卡
+      const plan = db.prepare('SELECT checkin_enabled FROM study_plans WHERE id=?').get(d.plan_id) as any
+      if (!plan) return json(res, 404, { error: 'Plan not found' })
+      if (!plan.checkin_enabled) return json(res, 400, { error: 'Plan checkin not enabled' })
+      // 幂等：已存在则返回已有记录
+      const exists = db.prepare('SELECT * FROM study_checkins WHERE plan_id=? AND date=?').get(d.plan_id, d.date) as any
+      if (exists) return json(res, 200, exists)
+      try {
+        const id = randomUUID()
+        db.prepare('INSERT INTO study_checkins (id,plan_id,date,note,created_at) VALUES (?,?,?,?,?)')
+          .run(id, d.plan_id, d.date, d.note ?? '', now())
+        return json(res, 201, db.prepare('SELECT * FROM study_checkins WHERE id=?').get(id))
+      } catch (e: any) {
+        return json(res, 500, { error: e?.message })
+      }
+    }
+
+    // DELETE /api/study/checkins/:planId/:date — 手动撤卡
+    if ((m = matchRoute(method, url, '/api/study/checkins/:planId/:date', 'DELETE')).matched) {
+      db.prepare('DELETE FROM study_checkins WHERE plan_id=? AND date=?')
+        .run(m.params.planId, m.params.date)
+      return json(res, 200, { ok: true })
     }
 
     // ═══════════════ NOTES ════════════════════════════════════
@@ -694,22 +737,32 @@ export class LocalHttpServer {
     db.prepare('UPDATE study_plans SET progress=?,updated_at=? WHERE id=?').run(progress, now(), planId)
   }
 
-  private tryAutoCheckin(db: ReturnType<StorageManager['getDb']>, planId: string) {
+  /**
+   * 尝试自动打卡。
+   *
+   * @param checkinDate 打卡目标日期（即刚完成的任务的 last_done_date）。
+   *   支持离线场景：任务昨天离线完成（last_done_date = 昨天），今天同步时仍应打在昨天。
+   *   若未传入则回退到服务端当天日期（在线实时操作场景）。
+   *
+   * 判断逻辑：该计划下所有任务的 last_done_date 都等于 checkinDate，才视为该天全部完成。
+   */
+  private tryAutoCheckin(db: ReturnType<StorageManager['getDb']>, planId: string, checkinDate?: string | null) {
     const plan = db.prepare('SELECT checkin_enabled FROM study_plans WHERE id=?').get(planId) as any
     if (!plan?.checkin_enabled) return
     const total = (db.prepare('SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=?').get(planId) as any).c
     if (total === 0) return
-    const today = new Date().toISOString().slice(0, 10)
-    // 未完成 = status='todo' 或 last_done_date 不是今天（按天重置语义）
-    const notDoneToday = (db.prepare(
-      "SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND (status='todo' OR last_done_date IS NULL OR last_done_date!=?)"
-    ).get(planId, today) as any).c
-    if (notDoneToday > 0) return
-    const exists = db.prepare('SELECT id FROM study_checkins WHERE plan_id=? AND date=?').get(planId, today)
+    // 若未传入 checkinDate，回退到服务端当天（在线实时操作）
+    const targetDate = checkinDate ?? new Date().toISOString().slice(0, 10)
+    // 未完成 = last_done_date 不等于目标日期（按天重置语义）
+    const notDoneOnDate = (db.prepare(
+      "SELECT COUNT(*) as c FROM study_tasks WHERE plan_id=? AND (last_done_date IS NULL OR last_done_date!=?)"
+    ).get(planId, targetDate) as any).c
+    if (notDoneOnDate > 0) return
+    const exists = db.prepare('SELECT id FROM study_checkins WHERE plan_id=? AND date=?').get(planId, targetDate)
     if (exists) return
     try {
       db.prepare('INSERT INTO study_checkins (id,plan_id,date,note,created_at) VALUES (?,?,?,?,?)')
-        .run(randomUUID(), planId, today, '', now())
+        .run(randomUUID(), planId, targetDate, '', now())
     } catch { /* UNIQUE 冲突忽略 */ }
   }
 

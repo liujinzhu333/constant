@@ -21,6 +21,16 @@
       </div>
 
       <div class="sidebar-footer">
+        <!-- 刷新按钮 -->
+        <div
+          class="nav-item refresh-btn"
+          :class="{ refreshing, 'refresh-done': refreshDone }"
+          :title="collapsed ? (refreshDone ? '已刷新' : '刷新') : ''"
+          @click="handleRefresh"
+        >
+          <el-icon class="nav-icon" :class="{ spinning: refreshing }"><Refresh /></el-icon>
+          <span class="nav-label">{{ refreshDone ? '已刷新' : '刷新' }}</span>
+        </div>
         <RouterLink to="/settings" class="nav-item" :title="collapsed ? '设置' : ''" @click="autoCollapse()">
           <el-icon class="nav-icon"><Setting /></el-icon>
           <span class="nav-label">设置</span>
@@ -53,8 +63,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Checked, Notebook, Calendar, Bell, List, Setting, Key, Star, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Checked, Notebook, Calendar, Bell, List, Setting, Key, Star, ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { useTodoStore } from '../stores/todo'
+import { useStudyStore } from '../stores/study'
+import { useScheduleStore } from '../stores/schedule'
+import { useNoteStore } from '../stores/note'
+import { useFavoriteStore } from '../stores/favorite'
+import { useAccountStore } from '../stores/account'
 import { useConnectionStore } from '../stores/connection'
 import { isElectron } from '../utils/env'
 
@@ -68,6 +83,11 @@ import AccountView from './account/AccountView.vue'
 import FavoriteView from './favorite/FavoriteView.vue'
 
 const todoStore = useTodoStore()
+const studyStore = useStudyStore()
+const scheduleStore = useScheduleStore()
+const noteStore = useNoteStore()
+const favoriteStore = useFavoriteStore()
+const accountStore = useAccountStore()
 const activeNav = ref('todo')
 
 // 窄屏默认折叠
@@ -84,6 +104,39 @@ function onResize() {
 }
 onMounted(() => window.addEventListener('resize', onResize))
 onUnmounted(() => window.removeEventListener('resize', onResize))
+
+// ── 刷新 ──
+const refreshing = ref(false)
+const refreshDone = ref(false)
+let refreshDoneTimer: ReturnType<typeof setTimeout> | null = null
+
+async function handleRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  refreshDone.value = false
+  try {
+    if (connStore) {
+      // 非 Electron：走 connection store 的 sync()（回放离线队列 + 调所有注册的刷新回调）
+      await connStore.sync()
+    } else {
+      // Electron：直接并行调各 store 的 load（不存在离线队列）
+      await Promise.all([
+        todoStore.load(),
+        studyStore.loadPlans(),
+        scheduleStore.loadMonth(),
+        scheduleStore.loadCheckinPlanTasks(),
+        noteStore.load(),
+        favoriteStore.load(),
+        accountStore.load(),
+      ])
+    }
+    refreshDone.value = true
+    if (refreshDoneTimer) clearTimeout(refreshDoneTimer)
+    refreshDoneTimer = setTimeout(() => { refreshDone.value = false }, 2000)
+  } finally {
+    refreshing.value = false
+  }
+}
 
 const viewMap: Record<string, unknown> = {
   todo: TodoView,
@@ -157,6 +210,13 @@ onMounted(async () => {
 .sidebar.collapsed .sidebar-logo .logo-text { opacity: 0; width: 0; }
 /* 折叠时隐藏"收起"文字，只留箭头图标 */
 .collapse-btn { color: var(--color-text-muted, var(--color-text-secondary)); }
+
+/* 刷新按钮 */
+.refresh-btn { color: var(--color-text-muted, var(--color-text-secondary)); cursor: pointer; }
+.refresh-btn.refresh-done { color: var(--el-color-success); }
+.refresh-btn.refreshing { pointer-events: none; opacity: 0.6; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning { animation: spin 0.8s linear infinite; display: inline-flex; }
 
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
 

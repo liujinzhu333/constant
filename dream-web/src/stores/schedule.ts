@@ -26,9 +26,10 @@ export interface DayItem {
   todoOverdue?: boolean  // true = 已超过截止日期且未完成
   // task 专属
   taskId?: string
-  taskDone?: boolean   // true = 今日已完成
-  planId?: string      // 所属计划 id
-  planTitle?: string   // 所属计划名称
+  taskDone?: boolean    // true = 当日已完成
+  taskMissed?: boolean  // true = 历史日期未完成（可补卡）
+  planId?: string       // 所属计划 id
+  planTitle?: string    // 所属计划名称
 }
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -114,22 +115,24 @@ export const useScheduleStore = defineStore('schedule', () => {
 
     // 3. 计划任务（开启打卡的顶层计划下的所有任务）
     //   - 今天/未来：展示所有任务，完成状态 = last_done_date === selectedStr
-    //   - 历史日期：只展示 last_done_date === selectedStr 的（那天已完成的）
+    //   - 历史日期：展示所有任务（含未完成），历史未完成用灰色边框区分
     for (const plan of checkinPlans.value) {
       const tasks = planTasksMap.value[plan.id] ?? []
       for (const task of tasks) {
-        const doneToday = task.last_done_date === selectedStr
-        // 历史日期只展示当天完成的任务
-        if (!isToday && !isFuture && !doneToday) continue
+        const doneOnDate = task.last_done_date === selectedStr
+        const isPast = !isToday && !isFuture
+        // 历史未完成：左边框用灰色，与已完成的计划色边框视觉区分
+        const borderColor = (isPast && !doneOnDate) ? '#c0c4cc' : (plan.color ?? '#34c759')
         items.push({
           id: `task-${task.id}`,
           title: task.title,
-          color: plan.color ?? '#34c759',
+          color: borderColor,
           source: 'task',
           taskId: task.id,
-          taskDone: doneToday,
+          taskDone: doneOnDate,
           planId: plan.id,
           planTitle: plan.title,
+          taskMissed: isPast && !doneOnDate,  // 标记为历史未完成
         })
       }
     }
@@ -259,17 +262,40 @@ export const useScheduleStore = defineStore('schedule', () => {
     schedules.value = schedules.value.filter(s => s.id !== id)
   }
 
-  /** 日程页直接切换计划任务完成状态，完成后重新拉取任务列表刷新界面 */
-  async function togglePlanTask(taskId: string, planId: string, currentDone: boolean) {
-    const studyStore = useStudyStore()
-    await studyStore.toggleTaskById(taskId, planId, currentDone)
-    // 直接重新拉取该计划的任务列表，确保 planTasksMap 被完整替换触发响应式更新
+  /**
+   * 日程页直接切换计划任务完成状态，完成后重新拉取任务列表刷新界面。
+   * 历史日期补卡时传入 targetDate，任务 last_done_date 将写为该日期而非今天。
+   */
+  async function togglePlanTask(taskId: string, planId: string, currentDone: boolean, targetDate?: string) {
+    const http = (await import('../utils/api')).getAxiosInstance()
+    const date = targetDate ?? dayjs().format('YYYY-MM-DD')
+
+    if (currentDone) {
+      // 撤销：清空 last_done_date
+      await http.patch(`/api/study/tasks/${taskId}`, { status: 'todo', last_done_date: null })
+    } else {
+      // 完成：写入目标日期
+      await http.patch(`/api/study/tasks/${taskId}`, { status: 'done', last_done_date: date })
+    }
+
+    // 重新拉取该计划任务列表
     const tasks = await studyApi.taskList(planId)
     planTasksMap.value = { ...planTasksMap.value, [planId]: tasks }
+
+    // 判断是否需要写/撤打卡记录
+    const allDoneOnDate = tasks.every((t: import('../utils/api').StudyTask) => t.last_done_date === date)
+    const checkinResp = await (await import('../utils/api')).checkinApi.list(planId, 6)
+    const alreadyChecked = checkinResp.some((c: import('../utils/api').StudyCheckin) => c.date === date)
+
+    if (allDoneOnDate && !alreadyChecked) {
+      try { await http.post('/api/study/checkins', { plan_id: planId, date }) } catch { /* 忽略 */ }
+    } else if (!allDoneOnDate && alreadyChecked) {
+      try { await http.delete(`/api/study/checkins/${planId}/${date}`) } catch { /* 忽略 */ }
+    }
   }
 
-  // 向 connection store 注册数据刷新回调（重连同步时重载当前月份日程）
-  useConnectionStore().registerRefresh(() => loadMonth())
+  // 向 connection store 注册数据刷新回调（重连同步时重载当前月份日程及计划任务）
+  useConnectionStore().registerRefresh(async () => { await Promise.all([loadMonth(), loadCheckinPlanTasks()]) })
 
   return {
     schedules, currentMonth, selectedDate, monthLabel,

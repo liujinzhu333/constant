@@ -76,7 +76,10 @@ export function getAxiosInstance() {
 }
 
 // 初始化时从 localStorage 读取已保存的 base（页面刷新后自动恢复）
+// 例外：localhost 访问时运行在 vite proxy 模式，不需要 baseURL（走相对路径即可）
 ;(function initApiBase() {
+  const isLocalhost = typeof location !== 'undefined' && location.hostname === 'localhost'
+  if (isLocalhost) return  // vite proxy 模式，忽略持久化的 baseURL
   const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(API_BASE_KEY) : null
   if (saved) instance.defaults.baseURL = saved
 })()

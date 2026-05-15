@@ -93,26 +93,67 @@
             <template v-if="store.currentPlan.checkin_target_days > 0">
               <span class="target-badge">目标 {{ store.currentPlan.checkin_target_days }} 天</span>
             </template>
-            <!-- 今日状态（只读，由任务全完成自动打卡） -->
-            <el-tag v-if="store.todayChecked()" type="success" size="small" effect="plain">今日已打卡 ✓</el-tag>
-            <el-tag v-else-if="store.tasks.length > 0" type="info" size="small" effect="plain">完成所有任务即打卡</el-tag>
+            <!-- 今日状态 / 补卡模式状态 -->
+            <template v-if="!store.selectedCheckinDate">
+              <el-tag v-if="store.todayChecked()" type="success" size="small" effect="plain">今日已打卡 ✓</el-tag>
+              <el-tag v-else-if="store.tasks.length > 0" type="info" size="small" effect="plain">完成所有任务即打卡</el-tag>
+            </template>
+            <template v-else>
+              <el-tag type="warning" size="small" effect="plain">补卡模式 · {{ store.selectedCheckinDate }}</el-tag>
+              <el-button link size="small" @click="store.selectCheckinDate(store.selectedCheckinDate!)">退出</el-button>
+            </template>
           </div>
         </div>
-        <!-- 热力图：近 12 周 -->
+        <!-- 热力图：近 12 周，格子可点击进入补卡模式 -->
         <div class="checkin-heatmap">
           <div v-for="week in checkinWeeks" :key="week.key" class="heatmap-col">
             <div
               v-for="cell in week.days" :key="cell.date"
               class="heatmap-cell"
-              :class="{ checked: cell.checked, 'out-of-range': !cell.inRange }"
-              :style="cell.checked ? { background: store.currentPlan?.color, opacity: '0.85' } : {}"
-              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '')"
+              :class="{
+                checked: cell.checked,
+                'out-of-range': !cell.inRange,
+                'cell-selected': store.selectedCheckinDate === cell.date,
+                'cell-clickable': cell.inRange,
+              }"
+              :style="cell.checked
+                ? { background: store.currentPlan?.color, opacity: store.selectedCheckinDate === cell.date ? '1' : '0.85' }
+                : store.selectedCheckinDate === cell.date ? { background: '#ff9f0a', opacity: '0.8' } : {}"
+              :title="cell.date + (cell.checked ? ' ✓ 已打卡' : '') + (cell.inRange && !cell.isToday ? ' · 点击补卡' : '')"
+              @click="cell.inRange && !cell.isToday && store.selectCheckinDate(cell.date)"
             />
           </div>
         </div>
         <div class="heatmap-legend">
           <span class="legend-label">{{ checkinMonthLabel }}</span>
           <span class="total-label">共 {{ store.checkins.length }} 次打卡</span>
+        </div>
+
+        <!-- 补卡任务面板：选中历史日期后展示 -->
+        <div v-if="store.selectedCheckinDate" class="makeup-panel">
+          <div class="makeup-header">
+            <span class="makeup-date-label">{{ store.selectedCheckinDate }} 的任务</span>
+            <el-tag
+              v-if="isSelectedDateChecked"
+              type="success" size="small" effect="plain"
+            >已打卡 ✓</el-tag>
+            <el-tag v-else type="info" size="small" effect="plain">未打卡</el-tag>
+          </div>
+          <div v-loading="store.selectedDateTasksLoading" class="makeup-task-list">
+            <div
+              v-for="task in store.selectedDateTasks" :key="task.id"
+              class="makeup-task-item"
+              :class="{ done: task.last_done_date === store.selectedCheckinDate }"
+            >
+              <el-checkbox
+                :model-value="task.last_done_date === store.selectedCheckinDate"
+                @change="store.toggleSelectedDateTask(task)"
+              />
+              <span class="task-title">{{ task.title }}</span>
+            </div>
+            <el-empty v-if="store.selectedDateTasks.length === 0 && !store.selectedDateTasksLoading"
+              description="该计划暂无任务" :image-size="32" />
+          </div>
         </div>
       </div>
 
@@ -360,23 +401,30 @@ const checkinWeeks = computed(() => {
   const checkedSet = new Set(store.checkins.map(c => c.date))
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const todayStr = today.toISOString().slice(0, 10)
   const startOfWeek = new Date(today)
   startOfWeek.setDate(today.getDate() - today.getDay())
   const firstSunday = new Date(startOfWeek)
   firstSunday.setDate(startOfWeek.getDate() - 11 * 7)
-  const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean }[] }[] = []
+  const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean; isToday: boolean }[] }[] = []
   const cursor = new Date(firstSunday)
   for (let w = 0; w < 12; w++) {
     const days = []
     for (let d = 0; d < 7; d++) {
       const dateStr = cursor.toISOString().slice(0, 10)
       const inRange = cursor <= today
-      days.push({ date: dateStr, checked: checkedSet.has(dateStr), inRange })
+      days.push({ date: dateStr, checked: checkedSet.has(dateStr), inRange, isToday: dateStr === todayStr })
       cursor.setDate(cursor.getDate() + 1)
     }
     weeks.push({ key: weeks.length + '-' + days[0].date, days })
   }
   return weeks
+})
+
+// 选中日期是否已打卡
+const isSelectedDateChecked = computed(() => {
+  if (!store.selectedCheckinDate) return false
+  return store.checkins.some(c => c.date === store.selectedCheckinDate)
 })
 
 const checkinMonthLabel = computed(() => {
@@ -630,6 +678,35 @@ async function addSubTask() {
 }
 .heatmap-cell.checked { transform: scale(1.05); }
 .heatmap-cell.out-of-range { opacity: 0.2; }
+.heatmap-cell.cell-clickable { cursor: pointer; }
+.heatmap-cell.cell-clickable:hover { transform: scale(1.2); filter: brightness(1.15); }
+.heatmap-cell.cell-selected { outline: 2px solid var(--color-text); outline-offset: 1px; transform: scale(1.15); }
+
+/* 补卡面板 */
+.makeup-panel {
+  margin-top: 10px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid #ff9f0a;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.makeup-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.makeup-date-label {
+  font-size: 12px; font-weight: 600; color: var(--color-text-muted);
+}
+.makeup-task-list { display: flex; flex-direction: column; gap: 4px; }
+.makeup-task-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 4px; border-radius: var(--radius-sm);
+  transition: background 100ms;
+}
+.makeup-task-item:hover { background: var(--color-border); }
+.makeup-task-item.done { opacity: 0.55; }
+.makeup-task-item.done .task-title { text-decoration: line-through; color: var(--color-text-muted); }
 
 .heatmap-legend {
   display: flex; justify-content: space-between; align-items: center;

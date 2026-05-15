@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { studyApi, checkinApi, offlinePost, offlinePatch, offlineDelete, readCache, writeCache, isApiOffline, type StudyPlan, type StudyTask, type StudyCheckin, type PlanCategory } from '../utils/api'
+import { getAxiosInstance } from '../utils/api'
 import { useConnectionStore } from './connection'
 
 export type { StudyPlan, StudyTask, StudyCheckin, PlanCategory }
@@ -32,6 +33,12 @@ export const useStudyStore = defineStore('study', () => {
   const checkins = ref<StudyCheckin[]>([])
   const checkinLoading = ref(false)
 
+  // 热力图选中日期（null = 未选中，展示今日；选中后展示补卡模式）
+  const selectedCheckinDate = ref<string | null>(null)
+  // 选中日期的任务列表（从服务端按 last_done_date 过滤或全量）
+  const selectedDateTasks = ref<StudyTask[]>([])
+  const selectedDateTasksLoading = ref(false)
+
   // ==================== 顶层计划 ====================
 
   async function loadPlans(category?: PlanCategory | 'all') {
@@ -59,6 +66,9 @@ export const useStudyStore = defineStore('study', () => {
     currentPlan.value = plan
     currentSubPlan.value = null
     subTasks.value = []
+    // 切换计划时退出补卡模式
+    selectedCheckinDate.value = null
+    selectedDateTasks.value = []
     const [t, s, c] = await Promise.all([
       studyApi.taskList(plan.id),
       studyApi.subPlanList(plan.id),
@@ -216,6 +226,90 @@ export const useStudyStore = defineStore('study', () => {
     } finally {
       checkinLoading.value = false
     }
+  }
+
+  /**
+   * 点击热力图格子，切换选中日期。
+   * 再次点击已选中日期 → 取消选中（回到今日模式）。
+   */
+  async function selectCheckinDate(date: string) {
+    const today = new Date().toISOString().slice(0, 10)
+    if (selectedCheckinDate.value === date || date === today) {
+      // 取消选中 / 点今天 → 退出补卡模式
+      selectedCheckinDate.value = null
+      selectedDateTasks.value = []
+      return
+    }
+    selectedCheckinDate.value = date
+    await loadSelectedDateTasks(date)
+  }
+
+  /** 加载选中历史日期的任务列表（走服务端，带 last_done_date 过滤） */
+  async function loadSelectedDateTasks(date: string) {
+    if (!currentPlan.value) return
+    selectedDateTasksLoading.value = true
+    try {
+      // 拉取该计划全量任务（服务端已按 last_done_date 做今日重置，历史日期需客户端过滤）
+      const all = await studyApi.taskList(currentPlan.value.id)
+      // 历史日期：展示所有任务（让用户知道哪些没完成），完成状态 = last_done_date === date
+      selectedDateTasks.value = all.map(t => ({
+        ...t,
+        status: t.last_done_date === date ? 'done' as const : 'todo' as const,
+      }))
+    } finally {
+      selectedDateTasksLoading.value = false
+    }
+  }
+
+  /**
+   * 补卡模式下切换任务完成状态（历史日期）。
+   * done → 发 PATCH last_done_date=date；todo → 发 PATCH last_done_date=null（需检查是否有其它日期）。
+   * 完成后重新判断是否需要写/撤打卡记录。
+   */
+  async function toggleSelectedDateTask(task: StudyTask) {
+    if (!selectedCheckinDate.value || !currentPlan.value) return
+    const date = selectedCheckinDate.value
+    const planId = currentPlan.value.id
+    const isDone = task.last_done_date === date
+
+    if (isDone) {
+      // 撤销该日完成：清空 last_done_date（只影响该任务）
+      await getAxiosInstance().patch(`/api/study/tasks/${task.id}`, { status: 'todo', last_done_date: null })
+    } else {
+      // 补完成：写 last_done_date = 选中日期
+      await getAxiosInstance().patch(`/api/study/tasks/${task.id}`, { status: 'done', last_done_date: date })
+    }
+
+    // 重新加载选中日期任务（刷新完成状态）
+    await loadSelectedDateTasks(date)
+
+    // 重新判断该日打卡：该日所有任务 last_done_date === date 才打卡
+    const allDoneOnDate = selectedDateTasks.value.every(t => t.last_done_date === date)
+    const alreadyChecked = checkins.value.some(c => c.date === date)
+    if (allDoneOnDate && !alreadyChecked) {
+      await manualCheckin(planId, date)
+    } else if (!allDoneOnDate && alreadyChecked) {
+      await manualRemoveCheckin(planId, date)
+    }
+  }
+
+  /** 手动写入指定日期的打卡记录（补卡） */
+  async function manualCheckin(planId: string, date: string) {
+    try {
+      const http = getAxiosInstance()
+      await http.post('/api/study/checkins', { plan_id: planId, date })
+      // 刷新打卡记录
+      checkins.value = await checkinApi.list(planId, 3)
+    } catch { /* 忽略，可能已存在 */ }
+  }
+
+  /** 手动撤销指定日期的打卡记录 */
+  async function manualRemoveCheckin(planId: string, date: string) {
+    try {
+      const http = getAxiosInstance()
+      await http.delete(`/api/study/checkins/${planId}/${date}`)
+      checkins.value = checkins.value.filter(c => c.date !== date)
+    } catch { /* 忽略 */ }
   }
 
   /** 今日是否已打卡 */
@@ -439,18 +533,37 @@ export const useStudyStore = defineStore('study', () => {
     return updated ?? null
   }
 
-  // 向 connection store 注册数据刷新回调（重连同步时重载顶层计划列表）
-  useConnectionStore().registerRefresh(() => loadPlans())
+  // 向 connection store 注册数据刷新回调（重连同步时重载顶层计划列表，以及当前打开计划的详细数据）
+  useConnectionStore().registerRefresh(async () => {
+    await loadPlans()
+    // 若用户当前正在查看某个计划，同步重载其任务、子计划、打卡记录
+    if (currentPlan.value) {
+      const [t, s, c] = await Promise.all([
+        studyApi.taskList(currentPlan.value.id),
+        studyApi.subPlanList(currentPlan.value.id),
+        checkinApi.list(currentPlan.value.id, 3),
+      ])
+      tasks.value = t
+      subPlans.value = s
+      checkins.value = c
+      // 若当前有选中的补卡日期，同步刷新该日任务列表
+      if (selectedCheckinDate.value) {
+        await loadSelectedDateTasks(selectedCheckinDate.value)
+      }
+    }
+  })
 
   return {
     plans, currentPlan, tasks, loading, activeCategory,
     subPlans, currentSubPlan, subTasks, subPlansLoading,
     checkins, checkinLoading,
+    selectedCheckinDate, selectedDateTasks, selectedDateTasksLoading,
     loadPlans, selectCategory, selectPlan,
     addPlan, updatePlan, deletePlan,
     loadSubPlans, selectSubPlan, addSubPlan, updateSubPlan, deleteSubPlan,
     addTask, toggleTask, toggleTaskById, deleteTask,
     addSubTask, toggleSubTask, deleteSubTask,
     loadCheckins, todayChecked, streakDays,
+    selectCheckinDate, toggleSelectedDateTask, manualCheckin, manualRemoveCheckin,
   }
 })

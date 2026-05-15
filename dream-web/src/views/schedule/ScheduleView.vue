@@ -86,7 +86,10 @@
           <div
             v-else-if="item.source === 'task'"
             class="event-item event-item--task"
-            :class="{ 'event-item--done': item.taskDone }"
+            :class="{
+              'event-item--done': item.taskDone,
+              'event-item--missed': item.taskMissed,
+            }"
             :style="{ borderLeftColor: item.color }"
           >
             <el-checkbox
@@ -95,8 +98,17 @@
               style="flex-shrink:0;margin-top:2px"
             />
             <div class="event-info">
-              <div class="event-title" :class="{ 'line-through': item.taskDone }">{{ item.title }}</div>
-              <el-tag size="small" type="success" style="margin-top:4px">{{ item.planTitle }}</el-tag>
+              <div class="event-title" :class="{ 'line-through': item.taskDone, 'title--missed': item.taskMissed }">
+                {{ item.title }}
+              </div>
+              <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <el-tag size="small" :type="item.taskDone ? 'success' : item.taskMissed ? 'info' : 'success'">
+                  {{ item.planTitle }}
+                </el-tag>
+                <el-tag v-if="item.taskMissed" size="small" type="info" effect="plain" class="missed-tag">
+                  当日未完成
+                </el-tag>
+              </div>
             </div>
           </div>
 
@@ -213,7 +225,9 @@ async function toggleTodo(id: string) {
 }
 
 async function togglePlanTask(taskId: string, planId: string, currentDone: boolean) {
-  await store.togglePlanTask(taskId, planId, currentDone)
+  // 历史日期补卡：传入选中日期，任务 last_done_date 写该日而非今天
+  const targetDate = store.selectedDate.isToday() ? undefined : store.selectedDate.format('YYYY-MM-DD')
+  await store.togglePlanTask(taskId, planId, currentDone, targetDate)
 }
 
 async function submit() {
@@ -269,6 +283,18 @@ async function submit() {
 }
 .event-item--overdue {
   background: rgba(255, 59, 48, 0.06);
+}
+/* 历史日期未完成的打卡任务 */
+.event-item--missed {
+  background: var(--color-bg-card);
+  opacity: 0.72;
+}
+.event-item--missed .title--missed {
+  color: var(--color-text-muted);
+}
+.missed-tag {
+  font-size: 11px;
+  border-style: dashed !important;
 }
 .event-info { flex: 1; min-width: 0; }
 .event-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
