@@ -584,8 +584,9 @@ onMounted(async () => {
     gap: 10px;
   }
 
-  /* 只显示 card-header，隐藏字段详情 */
-  .card-fields { display: none !important; }
+  /* 只显示 card-header，隐藏字段详情，去掉 header 下方间距 */
+  .account-card .card-fields { display: none; }
+  .account-card .card-header { margin-bottom: 0; }
   .account-card { padding: 10px 12px; }
 }
 
