@@ -69,7 +69,7 @@
 
         <!-- 底部：简洁模式切换 + 锁定 -->
         <div class="category-footer">
-          <el-button link size="small" @click="compactMode = !compactMode" style="color: var(--color-text-secondary);">
+          <el-button link size="small" :icon="compactMode ? Menu : List" @click="compactMode = !compactMode" style="color: var(--color-text-secondary);">
             {{ compactMode ? '详细' : '简洁' }}
           </el-button>
           <el-button link size="small" :icon="Lock" @click="store.clearKey()" style="color: var(--color-text-secondary);">
@@ -228,7 +228,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Lock, Plus, Edit, Delete, View, Hide, CopyDocument, Link as LinkIcon, Search } from '@element-plus/icons-vue'
+import { Lock, Plus, Edit, Delete, View, Hide, CopyDocument, Link as LinkIcon, Search, List, Menu } from '@element-plus/icons-vue'
 import { useAccountStore } from '../../stores/account'
 import type { AccountWithPlain, AccountCategory } from '../../stores/account'
 
