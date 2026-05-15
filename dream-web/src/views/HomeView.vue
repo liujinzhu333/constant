@@ -66,13 +66,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Checked, Notebook, Calendar, Bell, List, Setting, Key, Star, ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
+import { Checked, Notebook, Calendar, Bell, List, Setting, Key, Star, User, ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { useTodoStore } from '../stores/todo'
 import { useStudyStore } from '../stores/study'
 import { useScheduleStore } from '../stores/schedule'
 import { useNoteStore } from '../stores/note'
 import { useFavoriteStore } from '../stores/favorite'
 import { useAccountStore } from '../stores/account'
+import { useMemberStore } from '../stores/member'
 import { useConnectionStore } from '../stores/connection'
 import { isElectron } from '../utils/env'
 
@@ -84,6 +85,7 @@ import ScheduleView from './schedule/ScheduleView.vue'
 import ReminderView from './reminder/ReminderView.vue'
 import AccountView from './account/AccountView.vue'
 import FavoriteView from './favorite/FavoriteView.vue'
+import MemberView from './member/MemberView.vue'
 import SettingsView from './SettingsView.vue'
 
 const todoStore = useTodoStore()
@@ -92,6 +94,7 @@ const scheduleStore = useScheduleStore()
 const noteStore = useNoteStore()
 const favoriteStore = useFavoriteStore()
 const accountStore = useAccountStore()
+const memberStore = useMemberStore()
 const activeNav = ref('todo')
 
 // 窄屏默认折叠
@@ -132,6 +135,7 @@ async function handleRefresh() {
         noteStore.load(),
         favoriteStore.load(),
         accountStore.load(),
+        memberStore.load(),
       ])
     }
     refreshDone.value = true
@@ -150,6 +154,7 @@ const viewMap: Record<string, unknown> = {
   reminder: ReminderView,
   account: AccountView,
   favorite: FavoriteView,
+  member: MemberView,
   settings: SettingsView,
 }
 
@@ -162,7 +167,8 @@ const navItems = computed(() => [
   { key: 'schedule', icon: Calendar, label: '日程', badge: 0 },
   { key: 'reminder', icon: Bell, label: '提醒', badge: 0 },
   { key: 'favorite', icon: Star, label: '收藏', badge: 0 },
-  { key: 'account', icon: Key, label: '账号', badge: 0 }
+  { key: 'account', icon: Key, label: '账号', badge: 0 },
+  { key: 'member', icon: User, label: '人员', badge: 0 },
 ])
 
 onMounted(async () => {

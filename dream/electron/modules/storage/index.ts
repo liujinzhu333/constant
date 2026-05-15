@@ -239,6 +239,43 @@ export class StorageManager {
           created_at   INTEGER DEFAULT (strftime('%s', 'now')),
           updated_at   INTEGER DEFAULT (strftime('%s', 'now'))
         );
+
+        -- ===================== 业务包：人员管理 =====================
+        CREATE TABLE IF NOT EXISTS members (
+          id             TEXT PRIMARY KEY,
+          name           TEXT NOT NULL DEFAULT '',          -- 姓名
+          nickname       TEXT NOT NULL DEFAULT '',          -- 昵称
+          gender         TEXT NOT NULL DEFAULT 'unknown',   -- male/female/unknown
+          birth_date     TEXT NOT NULL DEFAULT '',          -- 公历生日 YYYY-MM-DD
+          birth_lunar    TEXT NOT NULL DEFAULT '',          -- 农历生日（自由文本，如"正月初一"）
+          relation       TEXT NOT NULL DEFAULT 'other',     -- family/relative/friend/colleague/other
+          relation_title TEXT NOT NULL DEFAULT '',          -- 称谓（如"表舅"、"外婆"）
+          phone          TEXT NOT NULL DEFAULT '',
+          email          TEXT NOT NULL DEFAULT '',
+          note           TEXT NOT NULL DEFAULT '',
+          tags           TEXT NOT NULL DEFAULT '[]',        -- JSON 字符串数组
+          avatar_color   TEXT NOT NULL DEFAULT '#409EFF',   -- 头像背景色
+          created_at     INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at     INTEGER DEFAULT (strftime('%s', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS member_events (
+          id          TEXT PRIMARY KEY,
+          member_id   TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          event_date  TEXT NOT NULL DEFAULT '',             -- YYYY-MM-DD 或自由文本
+          title       TEXT NOT NULL DEFAULT '',
+          content     TEXT NOT NULL DEFAULT '',
+          created_at  INTEGER DEFAULT (strftime('%s', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS member_relations (
+          id          TEXT PRIMARY KEY,
+          from_id     TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          to_id       TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          label       TEXT NOT NULL DEFAULT '',             -- 关系描述（如"朋友"、"同事"）
+          created_at  INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(from_id, to_id)
+        );
       `)
 
       // 数据迁移：兼容旧数据库

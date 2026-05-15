@@ -32,6 +32,7 @@ export class BusinessIpc {
     this.registerReminder()
     this.registerAccount()
     this.registerFavorite()
+    this.registerMember()
     this.logger.info('Business', '业务 IPC 处理器注册完成')
   }
 
@@ -486,6 +487,148 @@ export class BusinessIpc {
     // 删除
     ipcMain.handle('favorite:delete', (_e, id: string) => {
       this.db.prepare('DELETE FROM favorites WHERE id = ?').run(id)
+      return true
+    })
+  }
+
+  // ===================== 人员管理 =====================
+  private registerMember() {
+    // ── members ──
+
+    // 查询（支持按 relation/keyword/tag 筛选）
+    ipcMain.handle('member:list', (_e, filter: { relation?: string; keyword?: string; tag?: string } = {}) => {
+      let sql = 'SELECT * FROM members WHERE 1=1'
+      const params: unknown[] = []
+      if (filter.relation) { sql += ' AND relation = ?'; params.push(filter.relation) }
+      if (filter.keyword) { sql += ' AND (name LIKE ? OR nickname LIKE ? OR relation_title LIKE ?)'; params.push(`%${filter.keyword}%`, `%${filter.keyword}%`, `%${filter.keyword}%`) }
+      sql += ' ORDER BY created_at DESC'
+      const rows = this.db.prepare(sql).all(...params) as Array<Record<string, unknown>>
+      if (filter.tag) {
+        return rows.filter(r => {
+          const tags: string[] = JSON.parse((r.tags as string) || '[]')
+          return tags.includes(filter.tag!)
+        })
+      }
+      return rows
+    })
+
+    // 新增
+    ipcMain.handle('member:add', (_e, data: {
+      name: string; nickname?: string; gender?: string; birth_date?: string; birth_lunar?: string
+      relation?: string; relation_title?: string; phone?: string; email?: string; note?: string
+      tags?: string[]; avatar_color?: string
+    }) => {
+      const id = uuid()
+      const t = now()
+      this.db.prepare(`
+        INSERT INTO members (id,name,nickname,gender,birth_date,birth_lunar,relation,relation_title,phone,email,note,tags,avatar_color,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(
+        id, data.name, data.nickname ?? '', data.gender ?? 'unknown',
+        data.birth_date ?? '', data.birth_lunar ?? '',
+        data.relation ?? 'other', data.relation_title ?? '',
+        data.phone ?? '', data.email ?? '', data.note ?? '',
+        JSON.stringify(data.tags ?? []), data.avatar_color ?? '#409EFF', t, t
+      )
+      return this.db.prepare('SELECT * FROM members WHERE id = ?').get(id)
+    })
+
+    // 更新
+    ipcMain.handle('member:update', (_e, id: string, data: Partial<{
+      name: string; nickname: string; gender: string; birth_date: string; birth_lunar: string
+      relation: string; relation_title: string; phone: string; email: string; note: string
+      tags: string[]; avatar_color: string
+    }>) => {
+      const allowed = ['name','nickname','gender','birth_date','birth_lunar','relation','relation_title','phone','email','note','tags','avatar_color']
+      const safe: Record<string, unknown> = {}
+      for (const k of allowed) {
+        if (k in data) {
+          const v = (data as Record<string, unknown>)[k]
+          safe[k] = k === 'tags' && Array.isArray(v) ? JSON.stringify(v) : v
+        }
+      }
+      if (Object.keys(safe).length) {
+        const sets = Object.keys(safe).map(k => `${k} = ?`).join(', ')
+        const vals = Object.values(safe).map(v => v === undefined ? null : v)
+        this.db.prepare(`UPDATE members SET ${sets}, updated_at = ? WHERE id = ?`).run(...vals, now(), id)
+      }
+      return this.db.prepare('SELECT * FROM members WHERE id = ?').get(id)
+    })
+
+    // 删除
+    ipcMain.handle('member:delete', (_e, id: string) => {
+      this.db.prepare('DELETE FROM members WHERE id = ?').run(id)
+      return true
+    })
+
+    // 获取所有标签（聚合去重）
+    ipcMain.handle('member:allTags', () => {
+      const rows = this.db.prepare('SELECT tags FROM members').all() as Array<{ tags: string }>
+      const set = new Set<string>()
+      for (const r of rows) {
+        const tags: string[] = JSON.parse(r.tags || '[]')
+        for (const t of tags) set.add(t)
+      }
+      return [...set].sort()
+    })
+
+    // ── member_events ──
+
+    // 查询某人的经历
+    ipcMain.handle('member:eventList', (_e, memberId: string) => {
+      return this.db.prepare('SELECT * FROM member_events WHERE member_id = ? ORDER BY event_date DESC, created_at DESC').all(memberId)
+    })
+
+    // 新增经历
+    ipcMain.handle('member:eventAdd', (_e, data: { member_id: string; event_date?: string; title: string; content?: string }) => {
+      const id = uuid()
+      this.db.prepare(`
+        INSERT INTO member_events (id, member_id, event_date, title, content, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, data.member_id, data.event_date ?? '', data.title, data.content ?? '', now())
+      return this.db.prepare('SELECT * FROM member_events WHERE id = ?').get(id)
+    })
+
+    // 删除经历
+    ipcMain.handle('member:eventDelete', (_e, id: string) => {
+      this.db.prepare('DELETE FROM member_events WHERE id = ?').run(id)
+      return true
+    })
+
+    // ── member_relations ──
+
+    // 查询某人的关联（返回另一端的 member 信息）
+    ipcMain.handle('member:relationList', (_e, memberId: string) => {
+      return this.db.prepare(`
+        SELECT mr.id as rel_id, mr.label, mr.created_at as rel_created_at, m.*
+        FROM member_relations mr
+        JOIN members m ON m.id = mr.to_id
+        WHERE mr.from_id = ?
+        ORDER BY mr.created_at DESC
+      `).all(memberId)
+    })
+
+    // 新增关联（服务端事务，双向插入）
+    ipcMain.handle('member:relationAdd', (_e, data: { from_id: string; to_id: string; label?: string }) => {
+      const idAB = uuid()
+      const idBA = uuid()
+      const t = now()
+      const insert = this.db.prepare(`
+        INSERT OR IGNORE INTO member_relations (id, from_id, to_id, label, created_at) VALUES (?, ?, ?, ?, ?)
+      `)
+      this.db.transaction(() => {
+        insert.run(idAB, data.from_id, data.to_id, data.label ?? '', t)
+        insert.run(idBA, data.to_id, data.from_id, data.label ?? '', t)
+      })()
+      return { ok: true }
+    })
+
+    // 删除关联（双向删除）
+    ipcMain.handle('member:relationDelete', (_e, fromId: string, toId: string) => {
+      this.db.transaction(() => {
+        this.db.prepare('DELETE FROM member_relations WHERE from_id = ? AND to_id = ?').run(fromId, toId)
+        this.db.prepare('DELETE FROM member_relations WHERE from_id = ? AND to_id = ?').run(toId, fromId)
+      })()
       return true
     })
   }

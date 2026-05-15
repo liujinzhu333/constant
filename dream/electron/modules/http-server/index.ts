@@ -722,6 +722,125 @@ export class LocalHttpServer {
       return json(res, 200, { ok: true })
     }
 
+    // ─── Members ─────────────────────────────────────────────────
+
+    // GET /api/members
+    if ((m = matchRoute(method, url, '/api/members', 'GET')).matched) {
+      const qs = new URL(`http://x${url}`).searchParams
+      const relation = qs.get('relation') ?? ''
+      const keyword  = qs.get('keyword')  ?? ''
+      const tag      = qs.get('tag')      ?? ''
+      let sql = 'SELECT * FROM members WHERE 1=1'
+      const params: unknown[] = []
+      if (relation) { sql += ' AND relation = ?'; params.push(relation) }
+      if (keyword)  { sql += ' AND (name LIKE ? OR nickname LIKE ? OR relation_title LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`) }
+      sql += ' ORDER BY created_at DESC'
+      let rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>
+      if (tag) {
+        rows = rows.filter(r => {
+          const tags: string[] = JSON.parse((r.tags as string) || '[]')
+          return tags.includes(tag)
+        })
+      }
+      return json(res, 200, rows)
+    }
+
+    // POST /api/members
+    if ((m = matchRoute(method, url, '/api/members', 'POST')).matched) {
+      const d = await readBody(req)
+      const id = uuid(); const t = now()
+      db.prepare(`
+        INSERT INTO members (id,name,nickname,gender,birth_date,birth_lunar,relation,relation_title,phone,email,note,tags,avatar_color,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(id, d.name??'', d.nickname??'', d.gender??'unknown', d.birth_date??'', d.birth_lunar??'',
+        d.relation??'other', d.relation_title??'', d.phone??'', d.email??'', d.note??'',
+        d.tags?JSON.stringify(d.tags):'[]', d.avatar_color??'#409EFF', t, t)
+      return json(res, 201, db.prepare('SELECT * FROM members WHERE id=?').get(id))
+    }
+
+    // PATCH /api/members/:id
+    if ((m = matchRoute(method, url, '/api/members/:id', 'PATCH')).matched) {
+      const d = await readBody(req)
+      const allowed = ['name','nickname','gender','birth_date','birth_lunar','relation','relation_title','phone','email','note','tags','avatar_color']
+      const safe = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
+      if ('tags' in safe && Array.isArray(safe.tags)) safe.tags = JSON.stringify(safe.tags)
+      if (Object.keys(safe).length) {
+        const sets = Object.keys(safe).map(k=>`${k}=?`).join(',')
+        db.prepare(`UPDATE members SET ${sets},updated_at=? WHERE id=?`).run(...Object.values(safe).map(v => v===undefined?null:v), now(), m.params.id)
+      }
+      return json(res, 200, db.prepare('SELECT * FROM members WHERE id=?').get(m.params.id))
+    }
+
+    // DELETE /api/members/:id
+    if ((m = matchRoute(method, url, '/api/members/:id', 'DELETE')).matched) {
+      db.prepare('DELETE FROM members WHERE id=?').run(m.params.id)
+      return json(res, 200, { ok: true })
+    }
+
+    // GET /api/members/tags
+    if ((m = matchRoute(method, url, '/api/members/tags', 'GET')).matched) {
+      const rows = db.prepare('SELECT tags FROM members').all() as Array<{ tags: string }>
+      const set = new Set<string>()
+      for (const r of rows) { const tags: string[] = JSON.parse(r.tags||'[]'); for (const t of tags) set.add(t) }
+      return json(res, 200, [...set].sort())
+    }
+
+    // ─── Member Events ────────────────────────────────────────────
+
+    // GET /api/member-events?member_id=xxx
+    if ((m = matchRoute(method, url, '/api/member-events', 'GET')).matched) {
+      const memberId = new URL(`http://x${url}`).searchParams.get('member_id') ?? ''
+      return json(res, 200, db.prepare('SELECT * FROM member_events WHERE member_id=? ORDER BY event_date DESC, created_at DESC').all(memberId))
+    }
+
+    // POST /api/member-events
+    if ((m = matchRoute(method, url, '/api/member-events', 'POST')).matched) {
+      const d = await readBody(req)
+      const id = uuid()
+      db.prepare(`INSERT INTO member_events (id,member_id,event_date,title,content,created_at) VALUES (?,?,?,?,?,?)`)
+        .run(id, d.member_id??'', d.event_date??'', d.title??'', d.content??'', now())
+      return json(res, 201, db.prepare('SELECT * FROM member_events WHERE id=?').get(id))
+    }
+
+    // DELETE /api/member-events/:id
+    if ((m = matchRoute(method, url, '/api/member-events/:id', 'DELETE')).matched) {
+      db.prepare('DELETE FROM member_events WHERE id=?').run(m.params.id)
+      return json(res, 200, { ok: true })
+    }
+
+    // ─── Member Relations ─────────────────────────────────────────
+
+    // GET /api/member-relations?member_id=xxx
+    if ((m = matchRoute(method, url, '/api/member-relations', 'GET')).matched) {
+      const memberId = new URL(`http://x${url}`).searchParams.get('member_id') ?? ''
+      return json(res, 200, db.prepare(`
+        SELECT mr.id as rel_id, mr.label, mr.created_at as rel_created_at, m.*
+        FROM member_relations mr JOIN members m ON m.id=mr.to_id
+        WHERE mr.from_id=? ORDER BY mr.created_at DESC
+      `).all(memberId))
+    }
+
+    // POST /api/member-relations  （服务端事务，双向写入）
+    if ((m = matchRoute(method, url, '/api/member-relations', 'POST')).matched) {
+      const d = await readBody(req)
+      const idAB = uuid(); const idBA = uuid(); const t = now()
+      const ins = db.prepare(`INSERT OR IGNORE INTO member_relations (id,from_id,to_id,label,created_at) VALUES (?,?,?,?,?)`)
+      db.transaction(() => {
+        ins.run(idAB, d.from_id, d.to_id, d.label??'', t)
+        ins.run(idBA, d.to_id, d.from_id, d.label??'', t)
+      })()
+      return json(res, 201, { ok: true })
+    }
+
+    // DELETE /api/member-relations/:from_id/:to_id  （双向删除）
+    if ((m = matchRoute(method, url, '/api/member-relations/:from_id/:to_id', 'DELETE')).matched) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM member_relations WHERE from_id=? AND to_id=?').run(m.params.from_id, m.params.to_id)
+        db.prepare('DELETE FROM member_relations WHERE from_id=? AND to_id=?').run(m.params.to_id, m.params.from_id)
+      })()
+      return json(res, 200, { ok: true })
+    }
+
     logger.warn('HttpServer', `未匹配路由: ${method} ${url}`)
     return json(res, 404, { error: 'Not found' })
   }

@@ -578,3 +578,96 @@ export const favoriteApi = {
     return http.delete(`/api/favorites/${id}`)
   },
 }
+
+// ─── Members ──────────────────────────────────────────────────────
+
+export type MemberRelation = 'family' | 'relative' | 'friend' | 'colleague' | 'other'
+export type MemberGender   = 'male' | 'female' | 'unknown'
+
+export interface Member {
+  id: string
+  name: string
+  nickname: string
+  gender: MemberGender
+  birth_date: string
+  birth_lunar: string
+  relation: MemberRelation
+  relation_title: string
+  phone: string
+  email: string
+  note: string
+  tags: string         // JSON 字符串数组
+  avatar_color: string
+  created_at: number
+  updated_at: number
+}
+
+export interface MemberEvent {
+  id: string
+  member_id: string
+  event_date: string
+  title: string
+  content: string
+  created_at: number
+}
+
+export interface MemberRelationRow {
+  rel_id: string
+  label: string
+  rel_created_at: number
+  id: string
+  name: string
+  nickname: string
+  gender: MemberGender
+  relation: MemberRelation
+  relation_title: string
+  avatar_color: string
+  tags: string
+}
+
+export const memberApi = {
+  list(filter?: { relation?: string; keyword?: string; tag?: string }): Promise<Member[]> {
+    const qs = new URLSearchParams()
+    if (filter?.relation) qs.set('relation', filter.relation)
+    if (filter?.keyword)  qs.set('keyword',  filter.keyword)
+    if (filter?.tag)      qs.set('tag',       filter.tag)
+    const q = qs.toString()
+    return http.get(`/api/members${q ? '?' + q : ''}`)
+  },
+  add(data: Omit<Member, 'id' | 'created_at' | 'updated_at'>): Promise<Member> {
+    return http.post('/api/members', data)
+  },
+  update(id: string, data: Partial<Member>): Promise<Member> {
+    return http.patch(`/api/members/${id}`, data)
+  },
+  delete(id: string): Promise<{ ok: boolean }> {
+    return http.delete(`/api/members/${id}`)
+  },
+  allTags(): Promise<string[]> {
+    return http.get('/api/members/tags')
+  },
+}
+
+export const memberEventApi = {
+  list(memberId: string): Promise<MemberEvent[]> {
+    return http.get(`/api/member-events?member_id=${memberId}`)
+  },
+  add(data: { member_id: string; event_date?: string; title: string; content?: string }): Promise<MemberEvent> {
+    return http.post('/api/member-events', data)
+  },
+  delete(id: string): Promise<{ ok: boolean }> {
+    return http.delete(`/api/member-events/${id}`)
+  },
+}
+
+export const memberRelationApi = {
+  list(memberId: string): Promise<MemberRelationRow[]> {
+    return http.get(`/api/member-relations?member_id=${memberId}`)
+  },
+  add(data: { from_id: string; to_id: string; label?: string }): Promise<{ ok: boolean }> {
+    return http.post('/api/member-relations', data)
+  },
+  delete(fromId: string, toId: string): Promise<{ ok: boolean }> {
+    return http.delete(`/api/member-relations/${fromId}/${toId}`)
+  },
+}

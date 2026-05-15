@@ -67,6 +67,51 @@ export interface Favorite {
   updated_at: number
 }
 
+export type MemberRelation = 'family' | 'relative' | 'friend' | 'colleague' | 'other'
+export type MemberGender   = 'male' | 'female' | 'unknown'
+
+export interface Member {
+  id: string
+  name: string
+  nickname: string
+  gender: MemberGender
+  birth_date: string
+  birth_lunar: string
+  relation: MemberRelation
+  relation_title: string
+  phone: string
+  email: string
+  note: string
+  tags: string         // JSON 字符串数组
+  avatar_color: string
+  created_at: number
+  updated_at: number
+}
+
+export interface MemberEvent {
+  id: string
+  member_id: string
+  event_date: string
+  title: string
+  content: string
+  created_at: number
+}
+
+export interface MemberRelationRow {
+  rel_id: string
+  label: string
+  rel_created_at: number
+  // 以下是 joined members 字段
+  id: string
+  name: string
+  nickname: string
+  gender: MemberGender
+  relation: MemberRelation
+  relation_title: string
+  avatar_color: string
+  tags: string
+}
+
 export interface BackupInfo {
   name: string
   path: string
@@ -206,6 +251,23 @@ export interface DreamAPI {
     pin: (id: string, pinned: boolean) => Promise<boolean>
     delete: (id: string) => Promise<boolean>
   }
+  member: {
+    list: (filter?: { relation?: string; keyword?: string; tag?: string }) => Promise<Member[]>
+    add: (data: {
+      name: string; nickname?: string; gender?: string; birth_date?: string; birth_lunar?: string
+      relation?: string; relation_title?: string; phone?: string; email?: string; note?: string
+      tags?: string[]; avatar_color?: string
+    }) => Promise<Member>
+    update: (id: string, data: Partial<Omit<Member, 'id' | 'created_at' | 'updated_at'>>) => Promise<Member>
+    delete: (id: string) => Promise<boolean>
+    allTags: () => Promise<string[]>
+    eventList: (memberId: string) => Promise<MemberEvent[]>
+    eventAdd: (data: { member_id: string; event_date?: string; title: string; content?: string }) => Promise<MemberEvent>
+    eventDelete: (id: string) => Promise<boolean>
+    relationList: (memberId: string) => Promise<MemberRelationRow[]>
+    relationAdd: (data: { from_id: string; to_id: string; label?: string }) => Promise<{ ok: boolean }>
+    relationDelete: (fromId: string, toId: string) => Promise<boolean>
+  }
   httpServer: {
     start: () => Promise<{ success: boolean; port?: number; error?: string }>
     stop: () => Promise<{ success: boolean; error?: string }>
@@ -325,6 +387,19 @@ contextBridge.exposeInMainWorld('dreamAPI', {
     update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('favorite:update', id, data),
     pin: (id: string, pinned: boolean) => ipcRenderer.invoke('favorite:pin', id, pinned),
     delete: (id: string) => ipcRenderer.invoke('favorite:delete', id)
+  },
+  member: {
+    list: (filter?: Record<string, unknown>) => ipcRenderer.invoke('member:list', filter),
+    add: (data: Record<string, unknown>) => ipcRenderer.invoke('member:add', data),
+    update: (id: string, data: Record<string, unknown>) => ipcRenderer.invoke('member:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('member:delete', id),
+    allTags: () => ipcRenderer.invoke('member:allTags'),
+    eventList: (memberId: string) => ipcRenderer.invoke('member:eventList', memberId),
+    eventAdd: (data: Record<string, unknown>) => ipcRenderer.invoke('member:eventAdd', data),
+    eventDelete: (id: string) => ipcRenderer.invoke('member:eventDelete', id),
+    relationList: (memberId: string) => ipcRenderer.invoke('member:relationList', memberId),
+    relationAdd: (data: Record<string, unknown>) => ipcRenderer.invoke('member:relationAdd', data),
+    relationDelete: (fromId: string, toId: string) => ipcRenderer.invoke('member:relationDelete', fromId, toId),
   },
   httpServer: {
     start: () => ipcRenderer.invoke('httpServer:start'),
