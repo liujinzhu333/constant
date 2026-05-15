@@ -585,7 +585,7 @@ onMounted(async () => {
   }
 
   /* 只显示 card-header，隐藏字段详情 */
-  .card-fields { display: none; }
+  .card-fields { display: none !important; }
   .account-card { padding: 10px 12px; }
 }
 
