@@ -63,4 +63,42 @@ const showTitlebar = isElectron && isMac
   -webkit-app-region: no-drag;
   pointer-events: none;
 }
+
+/* ===== 全局弹窗移动端适配 ===== */
+@media (max-width: 767px) {
+  /* 弹窗全宽，贴底展示（sheet 风格） */
+  .el-dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 90dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* 弹窗内容区可滚动 */
+  .el-dialog .el-dialog__body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* 遮罩居底对齐 */
+  .el-overlay {
+    align-items: flex-end !important;
+  }
+
+  /* 底部按钮区固定不滚动 */
+  .el-dialog .el-dialog__footer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--color-border);
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}
 </style>
