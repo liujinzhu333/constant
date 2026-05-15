@@ -44,8 +44,9 @@
             v-for="item in filtered.filter(i => i.type === 'link')"
             :key="item.id"
             class="fav-card link-card"
+            @click.self="toggleExpand(item.id)"
           >
-            <div class="card-top">
+            <div class="card-top" @click="toggleExpand(item.id)">
               <div class="card-meta">
                 <el-icon v-if="item.is_pinned" class="pin-icon"><StarFilled /></el-icon>
                 <span class="card-type-tag link-tag">链接</span>
@@ -53,7 +54,7 @@
                   <el-tag v-for="t in parseTags(item.tags)" :key="t" size="small" type="info" effect="plain">{{ t }}</el-tag>
                 </div>
               </div>
-              <div class="card-actions">
+              <div class="card-actions" @click.stop>
                 <el-tooltip content="打开链接" placement="top" :show-after="400">
                   <el-button link size="small" :icon="LinkIcon" @click="openUrl(item.url)" />
                 </el-tooltip>
@@ -71,9 +72,12 @@
                 </el-popconfirm>
               </div>
             </div>
-            <div class="card-title">{{ item.title || item.url }}</div>
-            <div class="card-url" @click="openUrl(item.url)">{{ item.url }}</div>
-            <div v-if="item.author" class="card-author">— {{ item.author }}</div>
+            <div class="card-title" @click="toggleExpand(item.id)">{{ item.title || item.url }}</div>
+            <!-- 展开后才显示 URL 和来源 -->
+            <template v-if="expandedIds.has(item.id)">
+              <div class="card-url" @click.stop="openUrl(item.url)">{{ item.url }}</div>
+              <div v-if="item.author" class="card-author">— {{ item.author }}</div>
+            </template>
           </div>
         </template>
 
@@ -358,6 +362,15 @@ async function handleSave() {
   }
 }
 
+// ==================== 链接卡片展开/收起 ====================
+const expandedIds = ref<Set<string>>(new Set())
+
+function toggleExpand(id: string) {
+  const s = new Set(expandedIds.value)
+  s.has(id) ? s.delete(id) : s.add(id)
+  expandedIds.value = s
+}
+
 // ==================== 刷新 ====================
 async function refresh() {
   await store.load({ keyword: keyword.value || undefined })
@@ -548,6 +561,7 @@ onMounted(() => store.load())
 .card-actions :deep(.el-button) { padding: 2px 3px; }
 
 /* ===== 链接卡片 ===== */
+.link-card { cursor: pointer; }
 .card-title {
   font-size: 14px;
   font-weight: 600;
