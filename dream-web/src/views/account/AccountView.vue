@@ -67,8 +67,11 @@
           </div>
         </div>
 
-        <!-- 底部锁定 -->
+        <!-- 底部：简洁模式切换 + 锁定 -->
         <div class="category-footer">
+          <el-button link size="small" @click="compactMode = !compactMode" style="color: var(--color-text-secondary);">
+            {{ compactMode ? '详细' : '简洁' }}
+          </el-button>
           <el-button link size="small" :icon="Lock" @click="store.clearKey()" style="color: var(--color-text-secondary);">
             锁定
           </el-button>
@@ -77,7 +80,7 @@
 
       <!-- 右侧：账号列表 -->
       <div class="account-main">
-        <div class="account-list" v-loading="store.loading">
+        <div class="account-list" :class="{ compact: compactMode }" v-loading="store.loading">
           <el-empty v-if="filtered.length === 0" description="暂无账号" style="margin-top: 80px;" />
 
           <div v-for="acc in filtered" :key="acc.id" class="account-card">
@@ -267,6 +270,9 @@ async function unlock() {
   if (!ok) { keyError.value = '密钥错误，请重试'; inputKey.value = '' }
   else { keyError.value = ''; inputKey.value = '' }
 }
+
+// ==================== 简洁模式 ====================
+const compactMode = ref(false)
 
 // ==================== 分类导航 ====================
 const activeCategory = ref<AccountCategory | 'all'>('all')
@@ -524,6 +530,11 @@ onMounted(async () => {
   align-content: start;
 }
 
+/* ===== 简洁模式（PC 手动切换） ===== */
+.account-list.compact .account-card .card-fields { display: none; }
+.account-list.compact .account-card .card-header { margin-bottom: 0; }
+.account-list.compact .account-card { padding: 10px 12px; }
+
 /* ===== 移动端适配（≤767px） ===== */
 @media (max-width: 767px) {
   /* 锁屏：卡片自适应宽度 */
@@ -573,9 +584,11 @@ onMounted(async () => {
   }
   .cat-label { flex: unset; }
 
-  /* 底部锁定移到 header，隐藏底部 footer */
+  /* 底部整体隐藏，锁定移到 header */
   .category-footer { display: none; }
   .lock-btn-mobile { display: inline-flex; }
+  /* 简洁模式切换按钮移动端不需要（本就是简洁模式） */
+  .compact-toggle { display: none; }
 
   /* 卡片全宽单列 */
   .account-list {
@@ -585,9 +598,9 @@ onMounted(async () => {
   }
 
   /* 只显示 card-header，隐藏字段详情，去掉 header 下方间距 */
-  .account-card .card-fields { display: none; }
-  .account-card .card-header { margin-bottom: 0; }
-  .account-card { padding: 10px 12px; }
+  .account-list .account-card .card-fields { display: none; }
+  .account-list .account-card .card-header { margin-bottom: 0; }
+  .account-list .account-card { padding: 10px 12px; }
 }
 
 /* ===== 账号卡片 ===== */
