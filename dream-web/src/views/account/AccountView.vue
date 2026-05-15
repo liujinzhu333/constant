@@ -96,6 +96,9 @@
                 </el-tooltip>
               </div>
               <div class="card-actions">
+                <el-tooltip v-if="acc.password_enc" content="复制密码" placement="top" :show-after="300">
+                  <el-button link size="small" :icon="CopyDocument" @click="copy(acc.password_plain ?? '')" />
+                </el-tooltip>
                 <el-button link size="small" :icon="Edit" @click="openEdit(acc)" />
                 <el-popconfirm
                   title="确认删除该账号？"
@@ -580,6 +583,10 @@ onMounted(async () => {
     grid-template-columns: 1fr;
     gap: 10px;
   }
+
+  /* 只显示 card-header，隐藏字段详情 */
+  .card-fields { display: none; }
+  .account-card { padding: 10px 12px; }
 }
 
 /* ===== 账号卡片 ===== */
