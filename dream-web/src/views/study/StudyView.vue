@@ -397,21 +397,30 @@ onMounted(() => store.loadPlans())
 
 // ===== 打卡热力图 =====
 
+// 本地日期字符串，避免 toISOString() UTC 偏移导致日期错位
+function localDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 const checkinWeeks = computed(() => {
   const checkedSet = new Set(store.checkins.map(c => c.date))
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = localDateStr(today)
   const startOfWeek = new Date(today)
   startOfWeek.setDate(today.getDate() - today.getDay())
   const firstSunday = new Date(startOfWeek)
   firstSunday.setDate(startOfWeek.getDate() - 11 * 7)
   const weeks: { key: string; days: { date: string; checked: boolean; inRange: boolean; isToday: boolean }[] }[] = []
   const cursor = new Date(firstSunday)
+  cursor.setHours(0, 0, 0, 0)
   for (let w = 0; w < 12; w++) {
     const days = []
     for (let d = 0; d < 7; d++) {
-      const dateStr = cursor.toISOString().slice(0, 10)
+      const dateStr = localDateStr(cursor)
       const inRange = cursor <= today
       days.push({ date: dateStr, checked: checkedSet.has(dateStr), inRange, isToday: dateStr === todayStr })
       cursor.setDate(cursor.getDate() + 1)
