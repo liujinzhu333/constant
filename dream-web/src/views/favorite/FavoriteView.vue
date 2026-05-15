@@ -444,6 +444,59 @@ onMounted(() => store.load())
   align-content: start;
 }
 
+/* ===== 移动端适配（≤767px） ===== */
+@media (max-width: 767px) {
+  .fav-view { flex-direction: column; }
+
+  /* 左侧栏变顶部栏 */
+  .fav-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    flex-direction: column;
+    padding: 10px 12px 8px;
+    gap: 8px;
+  }
+
+  /* header 行 */
+  .fav-sidebar-header { padding: 0; }
+
+  /* 搜索框全宽 */
+  .fav-search { padding: 0; }
+
+  /* Tab 横排 */
+  .fav-nav {
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex: unset;
+  }
+  .fav-nav::-webkit-scrollbar { display: none; }
+
+  .fav-nav-item {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border-radius: 16px;
+    background: var(--color-border);
+    font-size: 12px;
+    gap: 4px;
+  }
+  .fav-nav-item.active {
+    background: var(--color-accent-light);
+    color: var(--color-accent);
+  }
+  .fav-nav-label { flex: unset; }
+
+  /* 卡片单列 */
+  .fav-list {
+    padding: 12px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
 /* ===== 卡片通用 ===== */
 .fav-card {
   background: var(--color-bg-card);

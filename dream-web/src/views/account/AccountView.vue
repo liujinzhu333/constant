@@ -35,7 +35,10 @@
       <div class="category-sidebar">
         <div class="category-header">
           <span class="category-title">账号管理</span>
-          <el-button type="primary" size="small" :icon="Plus" circle @click="openAdd" />
+          <div class="category-header-actions">
+            <el-button type="primary" size="small" :icon="Plus" circle @click="openAdd" />
+            <el-button size="small" :icon="Lock" circle title="锁定" class="lock-btn-mobile" @click="store.clearKey()" />
+          </div>
         </div>
 
         <!-- 搜索框 -->
@@ -453,6 +456,9 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--color-text);
 }
+.category-header-actions { display: flex; gap: 6px; align-items: center; }
+/* 锁定按钮默认隐藏，移动端才显示 */
+.lock-btn-mobile { display: none; }
 .category-search { padding: 0 2px; }
 .category-list {
   flex: 1;
@@ -513,6 +519,67 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fill, minmax(220px, 300px));
   gap: 10px;
   align-content: start;
+}
+
+/* ===== 移动端适配（≤767px） ===== */
+@media (max-width: 767px) {
+  /* 锁屏：卡片自适应宽度 */
+  .lock-card { padding: 32px 20px; width: calc(100% - 48px); max-width: 320px; }
+  .lock-card :deep(.el-input),
+  .lock-card :deep(.el-button),
+  .lock-card :deep(.el-alert) { width: 100% !important; }
+
+  /* 整体改为纵向布局 */
+  .account-view { flex-direction: column; }
+
+  /* 左侧栏变顶部栏 */
+  .category-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 10px 12px 8px;
+    gap: 8px;
+  }
+
+  .category-header { padding: 0; }
+  .category-search { padding: 0; }
+
+  /* 分类 Tab 横排 */
+  .category-list {
+    flex-direction: row;
+    flex: unset;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px;
+  }
+  .category-list::-webkit-scrollbar { display: none; }
+
+  .category-item {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border-radius: 16px;
+    background: var(--color-border);
+    font-size: 12px;
+    gap: 4px;
+  }
+  .category-item.active {
+    background: var(--color-accent-light);
+    color: var(--color-accent);
+  }
+  .cat-label { flex: unset; }
+
+  /* 底部锁定移到 header，隐藏底部 footer */
+  .category-footer { display: none; }
+  .lock-btn-mobile { display: inline-flex; }
+
+  /* 卡片全宽单列 */
+  .account-list {
+    padding: 12px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
 /* ===== 账号卡片 ===== */
