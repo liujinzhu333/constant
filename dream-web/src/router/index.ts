@@ -10,10 +10,10 @@ const router = createRouter({
       name: 'home',
       component: HomeView
     },
+    // 所有其他路径重定向到根（Settings 已并入 HomeView 侧边栏）
     {
-      path: '/settings',
-      name: 'settings',
-      component: () => import('../views/SettingsView.vue')
+      path: '/:pathMatch(.*)*',
+      redirect: '/'
     }
   ]
 })

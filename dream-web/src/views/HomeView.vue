@@ -31,10 +31,14 @@
           <el-icon class="nav-icon" :class="{ spinning: refreshing }"><Refresh /></el-icon>
           <span class="nav-label">{{ refreshDone ? '已刷新' : '刷新' }}</span>
         </div>
-        <RouterLink to="/settings" class="nav-item" :title="collapsed ? '设置' : ''" @click="autoCollapse()">
+        <div
+          class="nav-item" :class="{ active: activeNav === 'settings' }"
+          :title="collapsed ? '设置' : ''"
+          @click="activeNav = 'settings'; autoCollapse()"
+        >
           <el-icon class="nav-icon"><Setting /></el-icon>
           <span class="nav-label">设置</span>
-        </RouterLink>
+        </div>
         <!-- 折叠按钮 -->
         <div class="nav-item collapse-btn" :title="collapsed ? '展开' : '收起'" @click="collapsed = !collapsed">
           <el-icon class="nav-icon">
@@ -51,7 +55,7 @@
       <!-- 离线提示条 -->
       <div v-if="connStore?.isOffline" class="offline-bar">
         离线模式 — 仅展示缓存数据，写操作不可用
-        <RouterLink to="/settings" class="offline-bar-link">去重连</RouterLink>
+        <span class="offline-bar-link" @click="activeNav = 'settings'">去重连</span>
       </div>
       <KeepAlive>
         <component :is="currentView" />
@@ -62,7 +66,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
 import { Checked, Notebook, Calendar, Bell, List, Setting, Key, Star, ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { useTodoStore } from '../stores/todo'
 import { useStudyStore } from '../stores/study'
@@ -81,6 +84,7 @@ import ScheduleView from './schedule/ScheduleView.vue'
 import ReminderView from './reminder/ReminderView.vue'
 import AccountView from './account/AccountView.vue'
 import FavoriteView from './favorite/FavoriteView.vue'
+import SettingsView from './SettingsView.vue'
 
 const todoStore = useTodoStore()
 const studyStore = useStudyStore()
@@ -145,7 +149,8 @@ const viewMap: Record<string, unknown> = {
   schedule: ScheduleView,
   reminder: ReminderView,
   account: AccountView,
-  favorite: FavoriteView
+  favorite: FavoriteView,
+  settings: SettingsView,
 }
 
 const currentView = computed(() => viewMap[activeNav.value])
@@ -233,6 +238,7 @@ onMounted(async () => {
   color: var(--el-color-warning-dark-2);
   font-weight: 600;
   text-decoration: underline;
+  cursor: pointer;
 }
 
 /* 窄屏默认折叠（交给 JS 控制，CSS 仅做兜底） */
