@@ -192,13 +192,14 @@ export const useMemberStore = defineStore('member', () => {
   }
 
   async function addRelation(data: { from_id: string; to_id: string; label?: string }) {
-    await offlinePost('/api/member-relations', data, () => ({ ok: true }))
-    // 刷新关联列表
+    await memberRelationApi.add(data)
+    // 刷新关联列表（服务端双向写入后重新拉取）
     relations.value = await memberRelationApi.list(data.from_id)
   }
 
   async function deleteRelation(fromId: string, toId: string) {
-    await offlineDelete(`/api/member-relations/${fromId}/${toId}`)
+    await memberRelationApi.delete(fromId, toId)
+    // 从列表移除：rel_id 是 member_relations.id，to_id 是对方 member.id（即 r.id 字段）
     relations.value = relations.value.filter(r => r.id !== toId)
   }
 
