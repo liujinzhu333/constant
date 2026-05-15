@@ -44,15 +44,10 @@
             v-for="item in filtered.filter(i => i.type === 'link')"
             :key="item.id"
             class="fav-card link-card"
-            @click="toggleExpand(item.id)"
+            @click="openEdit(item)"
           >
             <!-- 标题（单行截断） -->
             <div class="card-title">{{ item.title || item.url }}</div>
-            <!-- 展开后才显示 URL 和来源 -->
-            <template v-if="expandedIds.has(item.id)">
-              <div class="card-url" @click.stop="openUrl(item.url)">{{ item.url }}</div>
-              <div v-if="item.author" class="card-author">— {{ item.author }}</div>
-            </template>
             <!-- 底部一行：左侧 meta，右侧操作 -->
             <div class="card-bottom" @click.stop>
               <div class="card-meta">
@@ -89,6 +84,7 @@
             v-for="item in filtered.filter(i => i.type === 'quote')"
             :key="item.id"
             class="fav-card quote-card"
+            @click="openEdit(item)"
           >
             <!-- 内容 -->
             <div class="quote-content">{{ item.content }}</div>
@@ -97,7 +93,7 @@
               <span v-if="item.title" class="quote-title-ref">《{{ item.title }}》</span>
             </div>
             <!-- 底部一行：左侧 meta，右侧操作 -->
-            <div class="card-bottom">
+            <div class="card-bottom" @click.stop>
               <div class="card-meta">
                 <el-icon v-if="item.is_pinned" class="pin-icon"><StarFilled /></el-icon>
                 <span class="card-type-tag quote-tag">名言</span>
@@ -128,7 +124,7 @@
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑收藏' : '新增收藏'"
+      :title="editingId ? '收藏详情' : '新增收藏'"
       width="500px"
       :close-on-click-modal="false"
       @closed="resetForm"
@@ -366,15 +362,6 @@ async function handleSave() {
   }
 }
 
-// ==================== 链接卡片展开/收起 ====================
-const expandedIds = ref<Set<string>>(new Set())
-
-function toggleExpand(id: string) {
-  const s = new Set(expandedIds.value)
-  s.has(id) ? s.delete(id) : s.add(id)
-  expandedIds.value = s
-}
-
 // ==================== 刷新 ====================
 async function refresh() {
   await store.load({ keyword: keyword.value || undefined })
@@ -526,6 +513,7 @@ onMounted(() => store.load())
   transition: box-shadow var(--duration-fast) var(--ease-out);
 }
 .fav-card:hover { box-shadow: var(--shadow-md); }
+.fav-card { cursor: pointer; }
 
 .card-bottom {
   display: flex;
@@ -566,7 +554,6 @@ onMounted(() => store.load())
 .card-actions :deep(.el-button) { padding: 2px 3px; }
 
 /* ===== 链接卡片 ===== */
-.link-card { cursor: pointer; }
 .card-title {
   font-size: 14px;
   font-weight: 600;
