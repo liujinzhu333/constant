@@ -420,10 +420,24 @@ export const studyApi = {
     const qs = new URLSearchParams()
     qs.set('parent_id', 'null')
     if (category) qs.set('category', category)
-    return http.get(`/api/study/plans?${qs.toString()}`)
+    return http.get(`/api/study/plans?${qs.toString()}`).then((plans) =>
+      (plans as StudyPlan[]).map(p => ({
+        ...p,
+        taskCount: p.task_count ?? 0,
+        doneCount: p.done_count ?? 0,
+        subPlanCount: p.sub_plan_count ?? 0,
+      }))
+    )
   },
   subPlanList(parentId: string): Promise<StudyPlan[]> {
-    return http.get(`/api/study/plans?parent_id=${parentId}`)
+    return http.get(`/api/study/plans?parent_id=${parentId}`).then((plans) =>
+      (plans as StudyPlan[]).map(p => ({
+        ...p,
+        taskCount: p.task_count ?? 0,
+        doneCount: p.done_count ?? 0,
+        subPlanCount: p.sub_plan_count ?? 0,
+      }))
+    )
   },
   planAdd(data: {
     title: string; description?: string; goal?: string; category?: string
