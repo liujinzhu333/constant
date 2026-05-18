@@ -726,10 +726,9 @@ export class LocalHttpServer {
 
     // GET /api/members
     if ((m = matchRoute(method, url, '/api/members', 'GET')).matched) {
-      const qs = new URL(`http://x${url}`).searchParams
-      const relation = qs.get('relation') ?? ''
-      const keyword  = qs.get('keyword')  ?? ''
-      const tag      = qs.get('tag')      ?? ''
+      const relation = query['relation'] ?? ''
+      const keyword  = query['keyword']  ?? ''
+      const tag      = query['tag']      ?? ''
       let sql = 'SELECT * FROM members WHERE 1=1'
       const params: unknown[] = []
       if (relation) { sql += ' AND relation = ?'; params.push(relation) }
@@ -789,7 +788,7 @@ export class LocalHttpServer {
 
     // GET /api/member-events?member_id=xxx
     if ((m = matchRoute(method, url, '/api/member-events', 'GET')).matched) {
-      const memberId = new URL(`http://x${url}`).searchParams.get('member_id') ?? ''
+      const memberId = query['member_id'] ?? ''
       return json(res, 200, db.prepare('SELECT * FROM member_events WHERE member_id=? ORDER BY event_date DESC, created_at DESC').all(memberId))
     }
 
@@ -812,9 +811,11 @@ export class LocalHttpServer {
 
     // GET /api/member-relations?member_id=xxx
     if ((m = matchRoute(method, url, '/api/member-relations', 'GET')).matched) {
-      const memberId = new URL(`http://x${url}`).searchParams.get('member_id') ?? ''
+      const memberId = query['member_id'] ?? ''
       return json(res, 200, db.prepare(`
-        SELECT mr.id as rel_id, mr.label, mr.created_at as rel_created_at, m.*
+        SELECT mr.id as rel_id, mr.label, mr.created_at as rel_created_at,
+               m.id, m.name, m.nickname, m.gender, m.relation, m.relation_title,
+               m.avatar_color, m.tags
         FROM member_relations mr JOIN members m ON m.id=mr.to_id
         WHERE mr.from_id=? ORDER BY mr.created_at DESC
       `).all(memberId))
