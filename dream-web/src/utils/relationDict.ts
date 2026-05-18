@@ -37,13 +37,9 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '直系亲属',
     pairs: [
       { label: '父亲', reverse: '儿子' },
-      { label: '爸爸', reverse: '儿子' },
-      { label: '爸',   reverse: '儿子' },
       { label: '母亲', reverse: '女儿' },
-      { label: '妈妈', reverse: '女儿' },
-      { label: '妈',   reverse: '女儿' },
       { label: '儿子', reverse: '父亲' },
-      { label: '女儿', reverse: '父亲' },
+      { label: '女儿', reverse: '母亲' },
     ],
   },
   {
@@ -51,11 +47,9 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '直系亲属',
     pairs: [
       { label: '爷爷', reverse: '孙子' },
-      { label: '奶奶', reverse: '孙子' },
+      { label: '奶奶', reverse: '孙女' },
       { label: '外公', reverse: '外孙' },
-      { label: '外婆', reverse: '外孙' },
-      { label: '姥爷', reverse: '外孙' },
-      { label: '姥姥', reverse: '外孙' },
+      { label: '外婆', reverse: '外孙女' },
       { label: '孙子', reverse: '爷爷' },
       { label: '孙女', reverse: '奶奶' },
       { label: '外孙', reverse: '外公' },
@@ -67,9 +61,7 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '直系亲属',
     pairs: [
       { label: '哥哥', reverse: '弟弟' },
-      { label: '哥',   reverse: '弟弟' },
       { label: '弟弟', reverse: '哥哥' },
-      { label: '弟',   reverse: '哥哥' },
     ],
   },
   {
@@ -77,9 +69,7 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '直系亲属',
     pairs: [
       { label: '姐姐', reverse: '妹妹' },
-      { label: '姐',   reverse: '妹妹' },
       { label: '妹妹', reverse: '姐姐' },
-      { label: '妹',   reverse: '姐姐' },
     ],
   },
   {
@@ -99,9 +89,7 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '旁系亲属',
     pairs: [
       { label: '叔叔', reverse: '侄子' },
-      { label: '叔',   reverse: '侄子' },
       { label: '伯伯', reverse: '侄子' },
-      { label: '伯父', reverse: '侄子' },
       { label: '侄子', reverse: '叔叔' },
       { label: '侄女', reverse: '叔叔' },
     ],
@@ -111,21 +99,20 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '旁系亲属',
     pairs: [
       { label: '舅舅', reverse: '外甥' },
-      { label: '舅',   reverse: '外甥' },
       { label: '外甥', reverse: '舅舅' },
       { label: '外甥女', reverse: '舅舅' },
     ],
   },
   {
-    name: '姑侄',
+    name: '姑侄 / 姨甥',
     category: '旁系亲属',
     pairs: [
       { label: '姑姑', reverse: '侄子' },
-      { label: '姑',   reverse: '侄子' },
       { label: '姨',   reverse: '外甥' },
-      { label: '阿姨', reverse: '外甥' },
       { label: '侄子', reverse: '姑姑' },
       { label: '侄女', reverse: '姑姑' },
+      { label: '外甥', reverse: '姨' },
+      { label: '外甥女', reverse: '姨' },
     ],
   },
   {
@@ -177,9 +164,7 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '姻亲',
     pairs: [
       { label: '丈夫', reverse: '妻子' },
-      { label: '老公', reverse: '老婆' },
       { label: '妻子', reverse: '丈夫' },
-      { label: '老婆', reverse: '老公' },
     ],
   },
   {
@@ -216,7 +201,6 @@ export const RELATION_DICT: RelationGroup[] = [
     pairs: [
       { label: '朋友', reverse: '朋友' },
       { label: '好友', reverse: '好友' },
-      { label: '好朋友', reverse: '好朋友' },
       { label: '闺蜜', reverse: '闺蜜' },
       { label: '死党', reverse: '死党' },
       { label: '老友', reverse: '老友' },
@@ -264,9 +248,7 @@ export const RELATION_DICT: RelationGroup[] = [
     category: '职场',
     pairs: [
       { label: '老板', reverse: '员工' },
-      { label: '老板娘', reverse: '员工' },
       { label: '上司', reverse: '下属' },
-      { label: '领导', reverse: '下属' },
       { label: '员工', reverse: '老板' },
       { label: '下属', reverse: '上司' },
     ],
@@ -277,7 +259,6 @@ export const RELATION_DICT: RelationGroup[] = [
     pairs: [
       { label: '老师', reverse: '学生' },
       { label: '师父', reverse: '徒弟' },
-      { label: '师傅', reverse: '徒弟' },
       { label: '学生', reverse: '老师' },
       { label: '徒弟', reverse: '师父' },
     ],
