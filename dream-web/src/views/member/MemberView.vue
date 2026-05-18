@@ -266,8 +266,9 @@
     </el-dialog>
 
     <!-- ── 关联人员 弹窗 ── -->
-    <el-dialog v-model="relationDialogVisible" title="关联人员" width="440px" :close-on-click-modal="false">
-      <el-form label-width="100px">
+    <el-dialog v-model="relationDialogVisible" title="关联人员" width="500px" :close-on-click-modal="false">
+      <el-form label-width="90px">
+        <!-- 选择人员 -->
         <el-form-item label="选择人员">
           <el-select v-model="relationTargetId" filterable placeholder="搜索姓名" style="width:100%">
             <el-option
@@ -278,19 +279,60 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <template #label>
-            <span>{{ currentMember?.name }} 叫 TA</span>
-          </template>
-          <el-input v-model="relationLabel" placeholder="如：表弟、老板、同学" @input="onRelationLabelInput" />
+
+        <!-- 关系大类 -->
+        <el-form-item label="关系大类">
+          <div class="rel-cat-tabs">
+            <span
+              v-for="cat in RELATION_CATEGORIES"
+              :key="cat"
+              class="rel-cat-tab"
+              :class="{ active: relationCategory === cat }"
+              @click="onSelectCategory(cat)"
+            >{{ cat }}</span>
+          </div>
         </el-form-item>
-        <el-form-item>
-          <template #label>
-            <span>TA 叫 {{ currentMember?.name }}</span>
-          </template>
+
+        <!-- 关系组 -->
+        <el-form-item label="选择关系" v-if="relationCategory">
+          <el-select v-model="relationGroupName" placeholder="选择关系组" style="width:100%" @change="onSelectGroup">
+            <el-option
+              v-for="g in currentCategoryGroups"
+              :key="g.name"
+              :label="g.name"
+              :value="g.name"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 我叫 TA -->
+        <el-form-item v-if="relationGroupName">
+          <template #label><span>{{ currentMember?.name }} 叫 TA</span></template>
+          <el-select v-model="relationPairLabel" placeholder="选择称谓" style="width:100%" @change="onSelectPair">
+            <el-option
+              v-for="p in currentGroupPairs"
+              :key="p.label"
+              :label="p.label"
+              :value="p.label"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- TA 叫我（可手动修改） -->
+        <el-form-item v-if="relationGroupName">
+          <template #label><span>TA 叫 {{ currentMember?.name }}</span></template>
+          <el-input v-model="relationReverseLabel" placeholder="自动填入，可手动修改" />
+        </el-form-item>
+
+        <!-- 自定义称谓（兜底输入） -->
+        <el-form-item v-if="!relationGroupName">
+          <template #label><span>{{ currentMember?.name }} 叫 TA</span></template>
+          <el-input v-model="relationLabel" placeholder="也可直接输入称谓" @input="onRelationLabelInput" />
+        </el-form-item>
+        <el-form-item v-if="!relationGroupName">
+          <template #label><span>TA 叫 {{ currentMember?.name }}</span></template>
           <el-input v-model="relationReverseLabel" placeholder="自动推断，可手动修改" />
         </el-form-item>
-        <div class="relation-hint">常见对称：同学↔同学、朋友↔朋友、同事↔同事；父亲↔儿子/女儿；老师↔学生</div>
       </el-form>
       <template #footer>
         <el-button @click="relationDialogVisible = false">取消</el-button>
@@ -305,6 +347,7 @@ import { ref, watch, computed } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Edit, Delete, Close, Grid, User } from '@element-plus/icons-vue'
 import { useMemberStore, RELATION_LABELS, RELATION_OPTIONS, randomAvatarColor, type Member, type MemberRelation, type MemberRelationRow } from '../../stores/member'
+import { RELATION_CATEGORIES, RELATION_DICT_BY_CATEGORY, inferReverseLabel, type RelationCategory } from '../../utils/relationDict'
 
 const memberStore = useMemberStore()
 
@@ -419,60 +462,61 @@ async function deleteEvent(id: string) {
   await memberStore.deleteEvent(id)
 }
 
-// ── 称谓反转映射表 ──
-const LABEL_REVERSE_MAP: Record<string, string> = {
-  // 直系长辈 → 晚辈
-  '父亲': '儿子', '爸爸': '儿子', '爸': '儿子',
-  '母亲': '女儿', '妈妈': '女儿', '妈': '女儿',
-  '儿子': '父亲', '女儿': '母亲',
-  '爷爷': '孙子', '奶奶': '孙女', '孙子': '爷爷', '孙女': '奶奶',
-  '外公': '外孙', '外婆': '外孙女', '姥爷': '外孙', '姥姥': '外孙女',
-  '外孙': '外公', '外孙女': '外婆',
-  // 兄弟姐妹
-  '哥哥': '弟弟', '哥': '弟弟',
-  '弟弟': '哥哥', '弟': '哥哥',
-  '姐姐': '妹妹', '姐': '妹妹',
-  '妹妹': '姐姐', '妹': '姐姐',
-  // 亲戚
-  '叔叔': '侄子', '叔': '侄子',
-  '伯伯': '侄子', '伯父': '侄子',
-  '舅舅': '外甥', '舅': '外甥',
-  '姑姑': '侄子', '姑': '侄子',
-  '姨': '外甥', '阿姨': '外甥',
-  '侄子': '叔叔', '侄女': '姑姑', '外甥': '舅舅', '外甥女': '舅舅',
-  '表哥': '表弟', '表弟': '表哥',
-  '表姐': '表妹', '表妹': '表姐',
-  '堂哥': '堂弟', '堂弟': '堂哥',
-  '堂姐': '堂妹', '堂妹': '堂姐',
-  // 社交
-  '老师': '学生', '学生': '老师',
-  '师父': '徒弟', '徒弟': '师父', '师傅': '徒弟',
-  '老板': '员工', '老板娘': '员工',
-  '上司': '下属', '下属': '上司',
-  '领导': '下属',
-  // 对称关系（自映射）
-  '同学': '同学', '朋友': '朋友', '好友': '好友', '闺蜜': '闺蜜',
-  '同事': '同事', '合伙人': '合伙人', '室友': '室友',
-  '邻居': '邻居', '战友': '战友',
-}
-
-function inferReverseLabel(label: string): string {
-  return LABEL_REVERSE_MAP[label.trim()] ?? ''
-}
-
 // ── 关联弹窗 ──
 const relationDialogVisible  = ref(false)
 const relationTargetId       = ref('')
-const relationLabel          = ref('')
+const relationCategory       = ref<RelationCategory | ''>('')
+const relationGroupName      = ref('')
+const relationPairLabel      = ref('')
+const relationLabel          = ref('')   // 兜底：直接手动输入时使用
 const relationReverseLabel   = ref('')
 
+// 当前大类下的所有关系组
+const currentCategoryGroups = computed(() =>
+  RELATION_DICT_BY_CATEGORY.find(c => c.category === relationCategory.value)?.groups ?? []
+)
+
+// 当前关系组的称谓对列表
+const currentGroupPairs = computed(() =>
+  currentCategoryGroups.value.find(g => g.name === relationGroupName.value)?.pairs ?? []
+)
+
+function onSelectCategory(cat: RelationCategory) {
+  relationCategory.value    = cat
+  relationGroupName.value   = ''
+  relationPairLabel.value   = ''
+  relationLabel.value       = ''
+  relationReverseLabel.value = ''
+}
+
+function onSelectGroup() {
+  relationPairLabel.value   = ''
+  relationLabel.value       = ''
+  relationReverseLabel.value = ''
+  // 自动选中该组第一个称谓对
+  const first = currentGroupPairs.value[0]
+  if (first) {
+    relationPairLabel.value    = first.label
+    relationLabel.value        = first.label
+    relationReverseLabel.value = first.reverse
+  }
+}
+
+function onSelectPair(label: string) {
+  const pair = currentGroupPairs.value.find(p => p.label === label)
+  relationLabel.value        = label
+  relationReverseLabel.value = pair?.reverse ?? ''
+}
+
 function onRelationLabelInput(val: string) {
-  // 只在反向称谓未被手动修改（或为空）时自动推断
   relationReverseLabel.value = inferReverseLabel(val)
 }
 
 function openRelationDialog() {
   relationTargetId.value     = ''
+  relationCategory.value     = ''
+  relationGroupName.value    = ''
+  relationPairLabel.value    = ''
   relationLabel.value        = ''
   relationReverseLabel.value = ''
   relationDialogVisible.value = true
@@ -633,7 +677,15 @@ watch(() => memberStore.members, (list) => {
 
 .empty-tip { color: var(--color-text-secondary); font-size: 13px; text-align: center; padding: 24px 0; }
 .tip { font-size: 12px; color: var(--color-text-secondary); padding: 4px 0; }
-.relation-hint { font-size: 11px; color: var(--color-text-secondary); margin-top: -4px; padding: 0 0 4px 100px; line-height: 1.5; }
+/* 关联弹窗大类 tab */
+.rel-cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.rel-cat-tab {
+  padding: 3px 10px; border-radius: 12px; font-size: 12px;
+  border: 1px solid var(--color-border); cursor: pointer;
+  color: var(--color-text-secondary); transition: all 120ms;
+}
+.rel-cat-tab:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.rel-cat-tab.active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; font-weight: 500; }
 
 @media (max-width: 768px) {
   .member-sidebar { width: 140px; }
