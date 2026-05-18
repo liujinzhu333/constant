@@ -495,9 +495,10 @@ const currentGroupPairs = computed(() =>
   currentCategoryGroups.value.find(g => g.name === relationGroupName.value)?.pairs ?? []
 )
 
-// 当前关系组所有 reverse 称谓（去重，用于「TA 叫我」下拉候选）
+// 当前关系组所有 label 称谓（去重，用于「TA 叫我」下拉候选）
+// 对方叫我的称谓 = 该关系组任意一个正向 label
 const currentGroupReverseLabels = computed(() =>
-  [...new Set(currentGroupPairs.value.map(p => p.reverse))]
+  [...new Set(currentGroupPairs.value.map(p => p.label))]
 )
 
 function onSelectCategory(cat: RelationCategory) {
