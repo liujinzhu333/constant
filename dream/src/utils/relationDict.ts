@@ -304,3 +304,8 @@ export function inferReverseLabel(label: string): string {
   }
   return ''
 }
+
+/** 全字典所有 reverse 称谓（去重，用于兜底下拉候选） */
+export const ALL_REVERSE_LABELS: string[] = [
+  ...new Set(RELATION_DICT.flatMap(g => g.pairs.map(p => p.reverse))),
+]

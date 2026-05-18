@@ -318,10 +318,17 @@
           </el-select>
         </el-form-item>
 
-        <!-- TA 叫我（可手动修改） -->
+        <!-- TA 叫我（下拉选 + 允许自定义，选了关系组时） -->
         <el-form-item v-if="relationGroupName">
           <template #label><span>TA 叫 {{ currentMember?.name }}</span></template>
-          <el-input v-model="relationReverseLabel" placeholder="自动填入，可手动修改" />
+          <el-select
+            v-model="relationReverseLabel"
+            filterable allow-create default-first-option
+            placeholder="自动填入，可选择或手动输入"
+            style="width:100%"
+          >
+            <el-option v-for="rv in currentGroupReverseLabels" :key="rv" :label="rv" :value="rv" />
+          </el-select>
         </el-form-item>
 
         <!-- 自定义称谓（兜底输入） -->
@@ -331,7 +338,14 @@
         </el-form-item>
         <el-form-item v-if="!relationGroupName">
           <template #label><span>TA 叫 {{ currentMember?.name }}</span></template>
-          <el-input v-model="relationReverseLabel" placeholder="自动推断，可手动修改" />
+          <el-select
+            v-model="relationReverseLabel"
+            filterable allow-create default-first-option
+            placeholder="自动推断，可选择或手动输入"
+            style="width:100%"
+          >
+            <el-option v-for="rv in ALL_REVERSE_LABELS" :key="rv" :label="rv" :value="rv" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -347,7 +361,7 @@ import { ref, watch, computed } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Edit, Delete, Close, Grid, User } from '@element-plus/icons-vue'
 import { useMemberStore, RELATION_LABELS, RELATION_OPTIONS, randomAvatarColor, type Member, type MemberRelation, type MemberRelationRow } from '../../stores/member'
-import { RELATION_CATEGORIES, RELATION_DICT_BY_CATEGORY, inferReverseLabel, type RelationCategory } from '../../utils/relationDict'
+import { RELATION_CATEGORIES, RELATION_DICT_BY_CATEGORY, ALL_REVERSE_LABELS, inferReverseLabel, type RelationCategory } from '../../utils/relationDict'
 
 const memberStore = useMemberStore()
 
@@ -479,6 +493,11 @@ const currentCategoryGroups = computed(() =>
 // 当前关系组的称谓对列表
 const currentGroupPairs = computed(() =>
   currentCategoryGroups.value.find(g => g.name === relationGroupName.value)?.pairs ?? []
+)
+
+// 当前关系组所有 reverse 称谓（去重，用于「TA 叫我」下拉候选）
+const currentGroupReverseLabels = computed(() =>
+  [...new Set(currentGroupPairs.value.map(p => p.reverse))]
 )
 
 function onSelectCategory(cat: RelationCategory) {
