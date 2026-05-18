@@ -1,19 +1,17 @@
-# Dream — AI Agent 协作指南
+# Dream（PC 端）— AI Agent 协作指南
 
-> 最后更新：2026-05-13（打卡模块重设计、HTTP Server PATCH 修复、离线同步改进）
+> 最后更新：2026-05-18
 
 ## 项目概述
 
-Dream 是一个基于 **Electron + Vue 3 + Vite + TypeScript** 的跨端个人助手系统（PC 端）。  
-架构设计为「**基座层固定 + 业务包热更新**」，但当前阶段基座与业务包一起打包发布，热更新为整包更新。
+基于 **Electron 29 + Vue 3 + Vite + TypeScript** 的 PC 端主应用。  
+内置 SQLite 数据库和 HTTP Server，是整个系统的数据中枢。
 
-- **平台支持**：macOS 10.12+（arm64）、Windows 10+
-- **Electron 版本**：29.x
-- **当前版本**：1.0.4
-- **数据目录**：
-  - macOS 生产：`~/Library/Application Support/dream/`
-  - macOS 开发：`~/Library/Application Support/dream-dev/`（与生产隔离，防止争抢单例锁）
-  - Windows：`%APPDATA%\dream\`
+- 平台：macOS 10.12+（arm64）、Windows 10+
+- 当前版本：1.0.4
+- userData 目录：macOS 生产 `~/Library/Application Support/dream/`，开发 `~/Library/Application Support/dream-dev/`
+
+**功能模块文档** → 见 [`../agent_doc/`](../agent_doc/)
 
 ---
 
@@ -21,52 +19,24 @@ Dream 是一个基于 **Electron + Vue 3 + Vite + TypeScript** 的跨端个人�
 
 ```
 dream/
-├── electron/                     # 主进程（Node.js 环境）
-│   ├── main/index.ts             # 主进程入口：开发/生产 userData 隔离、禁用 GPU、启动基座
-│   ├── preload/index.ts          # contextBridge 安全暴露所有 API（window.dreamAPI）
-│   ├── types/electron.d.ts       # App.isQuitting 类型扩展
+├── electron/
+│   ├── main/index.ts             # 主进程入口：userData 隔离、禁用 GPU
+│   ├── preload/index.ts          # contextBridge → window.dreamAPI
 │   └── modules/
-│       ├── startup/index.ts      # 启动模块：单例锁、窗口创建、业务包加载
-│       ├── logger/index.ts       # 日志模块：按天轮转，保留 30 天，支持读取/删除接口
-│       ├── storage/index.ts      # SQLite3 存储：AES-256 加密，WAL 模式，含数据库迁移守卫
-│       ├── updater/index.ts      # 整包更新：electron-updater + GitHub Releases，semver 比较
-│       ├── system/index.ts       # 系统适配：窗口/托盘/快捷键/系统通知
-│       ├── ipc/index.ts          # IPC 通信中心（注册所有处理器，含日志管理 handler）
-│       ├── business/index.ts     # 所有业务 IPC 处理器（Todo/Study/Note/Schedule/Reminder/Account/Favorite）
-│       └── http-server/index.ts  # HTTP REST Server（供 dream-web 访问，端口 45678/45679）
-├── src/                          # 渲染进程（浏览器环境）
-│   ├── main.ts                   # Vue 入口，注册 dayjs 插件，全量导入 Element Plus
-│   ├── App.vue
-│   ├── assets/main.css           # 全局 CSS Token（支持自动暗色模式）
-│   ├── router/index.ts
-│   ├── composables/
-│   │   └── useDebounce.ts        # 防抖工具（trigger/flush/cancel）
-│   ├── stores/
-│   │   ├── todo.ts               # 待办 Store（Pinia）
-│   │   ├── study.ts              # 计划 Store（含子计划、打卡 state/actions）
-│   │   ├── note.ts               # 笔记 Store（saveNote 不回写 content，防光标跳位）
-│   │   ├── schedule.ts           # 日程 Store（dayjs 月历）
-│   │   ├── account.ts            # 账号 Store（密钥内存持有，AES 加解密）
-│   │   └── favorite.ts           # 收藏 Store（链接/名言，置顶排序）
-│   └── views/
-│       ├── HomeView.vue          # 主视图，侧边导航，KeepAlive 缓存各模块
-│       ├── SettingsView.vue      # 设置页（含内嵌日志查看器 + 备份管理）
-│       ├── todo/TodoView.vue     # 待办任务视图
-│       ├── study/StudyView.vue   # 计划视图（三栏：类型/计划列表/子计划详情）
-│       ├── note/NoteView.vue     # 笔记视图
-│       ├── schedule/ScheduleView.vue  # 日程视图（月历 + 日程列表）
-│       ├── reminder/ReminderView.vue  # 提醒中心视图
-│       ├── account/AccountView.vue   # 账号管理视图（锁屏/分类导航/卡片列表）
-│       └── favorite/FavoriteView.vue  # 收藏视图（链接/名言卡片，置顶/标签/分类导航）
-├── dist-web/                     # dream-web 构建产物（由 sync-web 脚本自动同步）
-├── docs/
-│   ├── base-review.md            # 基座代码 Review 问题清单（待修复）
-│   └── roadmap.md                # 业务包热更新规划
-├── public/favicon.svg
-├── vite.config.ts
-├── package.json
-├── tsconfig.json
-└── tsconfig.node.json
+│       ├── storage/index.ts      # SQLite 建表、迁移守卫、AES 加密
+│       ├── business/index.ts     # 所有业务 IPC 处理器
+│       ├── http-server/index.ts  # HTTP REST Server（45678/45679）
+│       ├── startup/index.ts      # 单例锁、窗口创建
+│       ├── logger/index.ts       # 日志（按天轮转，保留 30 天）
+│       ├── updater/index.ts      # 整包更新（electron-updater）
+│       ├── system/index.ts       # 窗口/托盘/快捷键/系统通知
+│       └── ipc/index.ts          # IPC 注册中心
+├── src/
+│   ├── stores/                   # Pinia Store（todo/study/note/schedule/account/favorite/member）
+│   ├── views/                    # 各模块 View 组件
+│   ├── utils/relationDict.ts     # 人员关联关系字典
+│   └── assets/main.css           # 全局 CSS Token（暗色模式）
+└── dist-web/                     # dream-web 构建产物（sync-web 脚本同步）
 ```
 
 ---
@@ -74,189 +44,60 @@ dream/
 ## 常用命令
 
 ```bash
-# 安装依赖（自动触发 better-sqlite3 针对 Electron 的重编译）
-npm install
-
-# 开发模式（需先启动 dream-web dev server，再启动 Electron）
-# 1. 在 dream-web/ 目录：npm run dev
-# 2. 在 dream/ 目录：
-npm run electron:dev
-
-# 生产打包（自动先构建 dream-web，再打包 Electron，仅 macOS）
-npm run build:mac
-
-# 生产打包（仅 Windows）
-npm run build:win
-
-# 手动重编译 better-sqlite3
-npm run rebuild
-
-# ESLint 自动修复
-npm run lint
-
-# TypeScript 类型检查（无输出 = 通过）
-npx tsc --noEmit
+npm run electron:dev   # 开发模式（需先在 dream-web/ 执行 npm run dev）
+npm run build:mac      # 生产打包 macOS（自动先构建 dream-web）
+npm run build:win      # 生产打包 Windows
+npm run rebuild        # 手动重编译 better-sqlite3
+npm run lint           # ESLint 自动修复
+npx tsc --noEmit       # TypeScript 类型检查
 ```
 
 ---
 
 ## 架构要点
 
-### 主进程 / 渲染进程通信
+### IPC 通信
 
-- 所有 API 通过 `electron/preload/index.ts` 用 `contextBridge` 暴露为 `window.dreamAPI`
-- 渲染进程**不能**直接 `require('electron')`，必须通过 `window.dreamAPI.xxx` 调用
-- IPC channel 命名规范：`模块:操作`，例如 `todo:list`、`log:readFile`
-- **IPC 序列化规则**：传递给 IPC 的对象必须是普通 JS 对象，Vue 响应式 `Proxy` 无法被结构化克隆。在 store action 中调用 IPC 前，务必用 `JSON.parse(JSON.stringify(data))` 或展开运算符解除响应式。
+- 渲染进程通过 `window.dreamAPI.xxx` 调用，不能直接 `require('electron')`
+- Channel 命名：`模块:操作`，如 `todo:list`、`member:add`
+- **IPC 序列化**：传入 IPC 的对象必须解除 Vue 响应式，用 `JSON.parse(JSON.stringify(data))` 或展开运算符
 
-### HTTP Server（供 dream-web 访问）
+### HTTP Server
 
-- 端口：生产 `45678`，开发 `45679`（开发时 dream-web vite proxy 转发到 45679）
-- 入口：`electron/modules/http-server/index.ts`
-- 开发模式随 Electron 自动启动，生产模式需在设置页手动启动
-- **PATCH 路由注意**：`Object.values(safe)` 传给 `better-sqlite3` 前必须把 `undefined` 转为 `null`，否则报 `ERR_INVALID_ARG_TYPE`：
-  ```ts
-  const vals = Object.values(safe).map(v => v === undefined ? null : v)
-  db.prepare(`UPDATE ... SET ${sets} WHERE id=?`).run(...vals, now(), id)
-  ```
+- 端口：生产 `45678`，开发 `45679`
+- 开发模式随 Electron 自动启动；生产需在设置页手动启动
+- 路由层已去掉查询参数（`url.split('?')[0]`），**取查询参数必须用 `query` 对象**，不能用 `new URL()` 重新解析
+- PATCH 路由：`Object.values` 前须将 `undefined` 转为 `null`，否则 better-sqlite3 报 `ERR_INVALID_ARG_TYPE`
 
 ### 数据库迁移守卫
 
-- 新增字段必须在 `storage/index.ts` 的 `initDatabase()` 里用 `PRAGMA table_info` 检测并 `ALTER TABLE ADD COLUMN`
-- 迁移守卫只在应用**重启**时执行，修改代码后必须重启应用才能生效
-- 当前已迁移字段：`study_plans.category`、`study_plans.parent_id`、`study_plans.checkin_enabled`、`study_plans.checkin_goal`、`study_plans.checkin_target_days`、`accounts.category`
+- 新增字段在 `storage/index.ts` 的 `initDatabase()` 里用 `PRAGMA table_info` 检测后 `ALTER TABLE ADD COLUMN`
+- **迁移只在重启时执行**，改完代码必须重启才生效
 
-### 开发 / 生产环境隔离
+### 开发/生产隔离
 
 ```ts
-// main/index.ts 最顶部（必须在所有逻辑之前）
+// main/index.ts 最顶部
 const isDev = !!process.env.VITE_DEV_SERVER_URL
-if (isDev) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'dream-dev'))
-}
-```
-
-开发模式 userData 目录为 `dream-dev/`，与线上版本完全隔离（数据库、日志、单例锁均独立）。
-
-### 开发模式判断
-
-```ts
-// 正确（两处均需判断，因环境变量注入时机不同）
-const isDev = !!process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development'
-
-// 不可单独依赖
-const isDev = process.env.NODE_ENV === 'development'
+if (isDev) app.setPath('userData', path.join(app.getPath('appData'), 'dream-dev'))
 ```
 
 ### 输入框性能规范
 
-弹窗表单（提交时才调 IPC）可直接用 `v-model`。实时保存场景（如笔记）必须用本地 ref + 防抖：
-
-```vue
-<!-- 实时保存场景：正确 -->
-const localContent = ref('')
-<textarea :value="localContent" @input="onInput" @blur="flushSave" />
-
-<!-- 实时保存场景：错误（输入 → store → watch → IPC，链路阻塞导致卡顿）-->
-<textarea v-model="store.content" />
-```
-
-防抖在 view 层用 `useDebounce.ts` 包裹，**不在** store action 内加防抖。
+- 弹窗表单（提交时调 IPC）可直接用 `v-model`
+- 实时保存场景（如笔记）必须用本地 ref + 防抖，**不能** `v-model` 绑 store
+- 防抖在 view 层用 `useDebounce.ts`，不在 store action 内加
 
 ### SQLite 存储
 
-- 单例：`StorageManager.getInstance()`
-- WAL 模式，支持并发读
-- 加密密钥存于 `userData/.dream_key`（mode 0o600），AES-256 加密敏感字段
-- 数据库文件：`userData/dream.db`
-- **restoreBackup 流程**：数据库被进程持有时不能直接覆盖，必须先 `close()`，再 `fs.copyFileSync`，再 `initDatabase()` 重新连接。
+- 单例：`StorageManager.getInstance()`，WAL 模式
+- 加密密钥：`userData/.dream_key`（mode 0o600）
+- restoreBackup：必须先 `close()` → `fs.copyFileSync` → `initDatabase()` 重新连接
 
-### 笔记 Store 特殊规则
+### 其他陷阱
 
-`note.ts` 中 `saveNote` 回写 store 时**不能**回写 `content` 字段，否则触发 `watch` 导致编辑器光标跳位。
-
-### macOS 已知问题
-
-- Electron 29 + macOS GPU 进程崩溃：已在主进程添加 `app.commandLine.appendSwitch('--disable-gpu')` 规避
-- 启动耗时参考值：~1300ms
-
-### Element Plus 按钮间距陷阱
-
-`.el-button + .el-button` 有默认 `margin-left: 12px`，凡是多个按钮相邻的容器必须用 `:deep(.el-button + .el-button) { margin-left: 0 }` 覆盖，不与 `gap` 混用。
-
-### 打开本地目录
-
-`app:openExternal` 只放行 `https://` 协议。打开本地目录必须用 `app:showInFolder`（调用 `shell.showItemInFolder`）。
-
----
-
-## 业务模块说明
-
-### 待办（Todo）
-
-- **Store**：`stores/todo.ts` | **View**：`views/todo/TodoView.vue`
-- 优先级（高/中/低）、截止日期、状态筛选（全部/待完成/已完成）
-- tags 字段已存在于数据库，UI 层暂未使用
-
-### 计划（Study）
-
-- **Store**：`stores/study.ts` | **View**：`views/study/StudyView.vue`
-- 5 种类型：学习/工作/生活/健身/财务（`PLAN_CATEGORIES` 常量）
-- **三栏布局**：左栏（类型筛选+顶层计划列表）/ 中栏（计划详情+任务+子计划列表）/ 右栏（子计划任务详情）
-- 支持**子计划**：`study_plans.parent_id` 字段，`study:subPlanList` IPC
-- 支持**编辑**：新建/编辑/新建子计划/编辑子计划统一复用弹窗（`planDialogMode` 区分）
-- 进度自动同步：任务完成后前端 `syncProgress()` 本地更新，主进程 `syncPlanProgress()` 写库
-- **打卡模块**（可选，每个计划独立开关）：
-  - `study_plans` 新增字段：`checkin_enabled`、`checkin_goal`、`checkin_target_days`
-  - 打卡为**全自动**：当日任务全部完成 → 自动写入打卡记录；有任务未完成 → 自动撤销当日打卡
-  - IPC 端：`taskDone`/`taskUndone` 调用 `tryAutoCheckin`/`tryRemoveAutoCheckin`
-  - HTTP 端：`PATCH /api/study/tasks/:id` 状态变更时同样触发自动打卡逻辑
-  - 打卡记录只读展示：热力图 + 连续天数 + 今日状态徽章，无手动打卡按钮
-  - `checkinList` IPC：`study:checkinList(planId, months)`
-
-### 笔记（Note）
-
-- **Store**：`stores/note.ts` | **View**：`views/note/NoteView.vue`
-- 左右两栏：左侧笔记列表，右侧编辑区
-- 搜索防抖 400ms，编辑防抖 800ms，失焦立即保存（`flushSave`）
-- 置顶功能，纯文本编辑（无 Markdown 渲染）
-
-### 日程（Schedule）
-
-- **Store**：`stores/schedule.ts` | **View**：`views/schedule/ScheduleView.vue`
-- 月历视图，点击日期查看当日日程
-- 支持全天/时间段日程，颜色标记
-- 只能新建和删除，暂不支持编辑
-
-### 提醒（Reminder）
-
-- 无独立 Store | **View**：`views/reminder/ReminderView.vue`
-- 待处理/已完成 Tab
-- 推迟 10 分钟、标记完成、系统通知
-- 目前无定时自动触发机制（需手动进入提醒页查看）
-
-### 账号管理（Account）
-
-- **Store**：`stores/account.ts` | **View**：`views/account/AccountView.vue`
-- **加密策略**：密钥仅保存在内存（不持久化），密码在渲染进程用 `CryptoJS.AES` 加密后存密文；读取时渲染进程解密
-- 8 种平台类型：开发工具 / 社交媒体 / 购物 / 金融 / 游戏 / 工作 / 音视频 / 其他
-- **布局**：锁屏界面（密钥验证）→ 左侧分类导航栏 + 右侧 Grid 卡片列表（auto-fill，最大 300px）
-- 卡片字段：平台名、类型标签、链接图标（可跳转/复制）、账号名、手机、邮箱、密码（可显隐/复制）、备注
-- 密钥验证：取首条有密码的记录尝试解密，空字符串结果视为密钥错误
-
-### 收藏（Favorite）
-
-- **Store**：`stores/favorite.ts` | **View**：`views/favorite/FavoriteView.vue`
-- `type` 字段区分 `link`（网页链接）/ `quote`（名人名言）
-- 字段：`title / url / content / author / tags / is_pinned`
-- **布局**：左侧导航（全部/链接/名言 + 搜索 + 刷新/新增按钮）+ 右侧 Grid 卡片（auto-fill，minmax 260px 1fr）
-- 链接卡片：标题、URL 可点击跳转/复制、来源、标签
-- 名言卡片：橙色左边框引用样式、内容、作者、出处
-- 支持置顶（⭐）、编辑、删除（二次确认）、标签管理
-- 新增弹窗：类型切换显示对应字段，链接失焦自动提取域名填充标题
-- **刷新按钮**：侧边栏 header 右侧，点击重新拉取列表（插件收藏后可手动刷新查看结果）
-- IPC：`favorite:list/add/update/pin/delete`
-- **IPC 注意**：store 的 `add` / `update` 方法内用 `JSON.parse(JSON.stringify(data))` 解除响应式，避免 "object could not be cloned" 错误
+- `app:openExternal` 只放行 `https://`，打开本地目录用 `app:showInFolder`
+- `.el-button + .el-button` 有默认 `margin-left: 12px`，多按钮容器用 `:deep(.el-button + .el-button) { margin-left: 0 }` 覆盖
 
 ---
 
@@ -264,97 +105,29 @@ const localContent = ref('')
 
 | 功能区 | 说明 |
 |---|---|
-| 关于 | 显示基座版本、运行平台 |
-| 更新 | 检查更新（GitHub Releases）、下载、立即安装、回滚版本 |
-| 数据 | 显示数据目录路径、备份数据、历史备份列表（时间/大小/恢复/删除）、导入备份、打开目录 |
-| 服务地址 | 本地 HTTP 服务手动启停（端口 45678）；开发环境随应用自动启动，生产环境需手动启动；开启后所有 Web 项目（浏览器插件、移动端等）均可访问当前 Dream 实例数据 |
-| 日志 | 内嵌日志查看器：文件标签切换、级别着色、自动滚底、单文件删除、清空历史 |
+| 关于 | 版本、平台信息 |
+| 更新 | 检查/下载/安装/回滚（GitHub Releases） |
+| 数据 | 数据目录、备份/恢复/导入 |
+| 服务地址 | HTTP Server 手动启停（端口 45678） |
+| 日志 | 内嵌日志查看器（文件标签/级别着色/删除） |
 
 ---
 
 ## 更新机制
 
-### 当前实现（整包更新）
-
 ```
-用户点「检查更新」
-  → 拉取 GitHub Release 的 latest-mac.yml
-  → semver 比较（远端 > 本地才算有更新）
-  → 下载 Dream-{version}-arm64-mac.zip
-  → 下载完成弹窗确认
-  → quitAndInstall() 退出重启安装
+检查更新 → 拉取 latest-mac.yml → semver 比较
+→ 下载 Dream-{version}-arm64-mac.zip
+→ 确认后 quitAndInstall() 重启安装
 ```
 
-- 更新源：`https://github.com/liujinzhu333/constant/releases`
-- 开发模式下 `electron-updater` 自动跳过，不影响开发
-- **白屏 Bug 已修复**：生产环境自动检测更新失败时加三层保护（全局 uncaughtException 兜底 + userTriggered 标志 + .catch 双重保险），防止触发白屏
+发版：修改 `package.json` 版本号 → `npm run build:mac` → 上传 `release/` 全部文件到 GitHub Release（tag: vx.x.x）
 
-### 发版流程
-
-```bash
-# 1. 修改版本号
-# dream/package.json → "version": "x.x.x"
-
-# 2. 打包（自动先构建 dream-web 再打包 Electron）
-npm run build:mac
-
-# 3. 将 release/ 下所有文件上传到 GitHub Release（tag: vx.x.x）
-# 必须包含：.dmg、-mac.zip、.dmg.blockmap、-mac.zip.blockmap、latest-mac.yml
-```
-
-### 签名说明
-
-本地构建无 Apple Developer ID 签名，首次安装需：
-```bash
-xattr -cr /Applications/Dream.app
-# 或在「系统设置 → 隐私与安全性」手动允许
-```
-
-### 业务包独立热更新（规划中）
-
-见 `docs/roadmap.md`。目前基座与业务包一起打包，`business_packages` 表为预留结构。
+首次安装（无签名）：`xattr -cr /Applications/Dream.app`
 
 ---
 
-## IPC API 完整列表（window.dreamAPI）
+## 已知问题
 
-```ts
-window.dreamAPI = {
-  app:      { getVersion, getPlatform, getPath, openExternal, showInFolder, showOpenDialog, showSaveDialog, minimize, quit },
-  store:    { set, get, delete, backup, getMeta, listBackups, deleteBackup, restoreBackup, importBackup },
-  log:      { debug, info, warn, error, getLogDir, getFiles, readFile, deleteFile, clearAll },
-  updater:  { check, download, install, getStatus, rollback, onStatus, onProgress, onError },
-  notification: { send },
-  todo:     { list, add, update, done, undone, delete },
-  study:    { planList, planAdd, planUpdate, planDelete, subPlanList,
-              taskList, taskAdd, taskDone, taskUndone, taskDelete,
-              checkinList },
-  note:     { list, get, add, update, delete },
-  schedule: { list, add, update, delete },
-  reminder: { list, add, dismiss, snooze, delete },
-  account:  { list, add, update, delete },
-  favorite: { list, add, update, pin, delete },
-  httpServer: { start, stop, status },
-}
-```
-
----
-
-## 依赖说明
-
-| 依赖 | 用途 |
-|---|---|
-| `better-sqlite3` | SQLite3 本地存储（需针对 Electron 重编译） |
-| `crypto-js` | AES-256 加密 |
-| `dayjs` | 日期处理（需注册 `isSameOrBefore`/`isToday`/`isTomorrow`/`isYesterday` 插件） |
-| `electron-log` | 日志（按天轮转，支持文件读取） |
-| `electron-updater` | 整包更新（GitHub Releases provider） |
-| `pinia` | 状态管理 |
-| `vue-router` | 路由 |
-| `vite-plugin-electron` | Vite 集成 Electron 开发/构建 |
-
----
-
-## 已知问题 & 待办
-
-详见 `docs/base-review.md`（基座 Review 清单）和 `docs/roadmap.md`（功能规划）。
+- Electron 29 + macOS GPU 崩溃：已加 `--disable-gpu` 规避
+- `SELECT mr.id as rel_id, m.*` 中 `m.*` 会覆盖别名，需显式列出字段
