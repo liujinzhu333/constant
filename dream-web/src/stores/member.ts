@@ -191,7 +191,7 @@ export const useMemberStore = defineStore('member', () => {
     }
   }
 
-  async function addRelation(data: { from_id: string; to_id: string; label?: string }) {
+  async function addRelation(data: { from_id: string; to_id: string; label?: string; reverse_label?: string }) {
     await memberRelationApi.add(data)
     // 刷新关联列表（服务端双向写入后重新拉取）
     relations.value = await memberRelationApi.list(data.from_id)

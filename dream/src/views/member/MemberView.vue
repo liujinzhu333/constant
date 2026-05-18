@@ -259,8 +259,8 @@
     </el-dialog>
 
     <!-- ── 关联人员 弹窗 ── -->
-    <el-dialog v-model="relationDialogVisible" title="关联人员" width="400px" :close-on-click-modal="false">
-      <el-form label-width="80px">
+    <el-dialog v-model="relationDialogVisible" title="关联人员" width="440px" :close-on-click-modal="false">
+      <el-form label-width="100px">
         <el-form-item label="选择人员">
           <el-select v-model="relationTargetId" filterable placeholder="搜索姓名" style="width:100%">
             <el-option
@@ -271,9 +271,15 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="关系描述">
-          <el-input v-model="relationLabel" placeholder="如：同学、老朋友" />
+        <el-form-item>
+          <template #label><span>{{ currentMember?.name }} 叫 TA</span></template>
+          <el-input v-model="relationLabel" placeholder="如：表弟、老板、同学" @input="onRelationLabelInput" />
         </el-form-item>
+        <el-form-item>
+          <template #label><span>TA 叫 {{ currentMember?.name }}</span></template>
+          <el-input v-model="relationReverseLabel" placeholder="自动推断，可手动修改" />
+        </el-form-item>
+        <div class="relation-hint">常见对称：同学↔同学、朋友↔朋友；父亲↔儿子/女儿；老师↔学生</div>
       </el-form>
       <template #footer>
         <el-button @click="relationDialogVisible = false">取消</el-button>
@@ -396,14 +402,47 @@ async function deleteEvent(id: string) {
   await memberStore.deleteEvent(id)
 }
 
+// ── 称谓反转映射表 ──
+const LABEL_REVERSE_MAP: Record<string, string> = {
+  '父亲': '儿子', '爸爸': '儿子', '爸': '儿子',
+  '母亲': '女儿', '妈妈': '女儿', '妈': '女儿',
+  '儿子': '父亲', '女儿': '母亲',
+  '爷爷': '孙子', '奶奶': '孙女', '孙子': '爷爷', '孙女': '奶奶',
+  '外公': '外孙', '外婆': '外孙女', '姥爷': '外孙', '姥姥': '外孙女',
+  '外孙': '外公', '外孙女': '外婆',
+  '哥哥': '弟弟', '哥': '弟弟', '弟弟': '哥哥', '弟': '哥哥',
+  '姐姐': '妹妹', '姐': '妹妹', '妹妹': '姐姐', '妹': '姐姐',
+  '叔叔': '侄子', '叔': '侄子', '伯伯': '侄子', '伯父': '侄子',
+  '舅舅': '外甥', '舅': '外甥', '姑姑': '侄子', '姑': '侄子',
+  '姨': '外甥', '阿姨': '外甥',
+  '侄子': '叔叔', '侄女': '姑姑', '外甥': '舅舅', '外甥女': '舅舅',
+  '表哥': '表弟', '表弟': '表哥', '表姐': '表妹', '表妹': '表姐',
+  '堂哥': '堂弟', '堂弟': '堂哥', '堂姐': '堂妹', '堂妹': '堂姐',
+  '老师': '学生', '学生': '老师',
+  '师父': '徒弟', '徒弟': '师父', '师傅': '徒弟',
+  '老板': '员工', '老板娘': '员工', '上司': '下属', '下属': '上司', '领导': '下属',
+  '同学': '同学', '朋友': '朋友', '好友': '好友', '闺蜜': '闺蜜',
+  '同事': '同事', '合伙人': '合伙人', '室友': '室友', '邻居': '邻居', '战友': '战友',
+}
+
+function inferReverseLabel(label: string): string {
+  return LABEL_REVERSE_MAP[label.trim()] ?? ''
+}
+
 // ── 关联弹窗 ──
-const relationDialogVisible = ref(false)
-const relationTargetId = ref('')
-const relationLabel    = ref('')
+const relationDialogVisible  = ref(false)
+const relationTargetId       = ref('')
+const relationLabel          = ref('')
+const relationReverseLabel   = ref('')
+
+function onRelationLabelInput(val: string) {
+  relationReverseLabel.value = inferReverseLabel(val)
+}
 
 function openRelationDialog() {
-  relationTargetId.value = ''
-  relationLabel.value = ''
+  relationTargetId.value      = ''
+  relationLabel.value         = ''
+  relationReverseLabel.value  = ''
   relationDialogVisible.value = true
 }
 
@@ -412,7 +451,12 @@ async function submitRelation() {
   if (!currentMember.value) return
   submitting.value = true
   try {
-    await memberStore.addRelation({ from_id: currentMember.value.id, to_id: relationTargetId.value, label: relationLabel.value })
+    await memberStore.addRelation({
+      from_id:       currentMember.value.id,
+      to_id:         relationTargetId.value,
+      label:         relationLabel.value,
+      reverse_label: relationReverseLabel.value,
+    })
     relationDialogVisible.value = false
   } finally {
     submitting.value = false
@@ -549,4 +593,5 @@ watch(() => memberStore.members, (list) => {
 
 .empty-tip { color: var(--color-text-secondary); font-size: 13px; text-align: center; padding: 24px 0; }
 .tip { font-size: 12px; color: var(--color-text-secondary); padding: 4px 0; }
+.relation-hint { font-size: 11px; color: var(--color-text-secondary); margin-top: -4px; padding: 0 0 4px 100px; line-height: 1.5; }
 </style>

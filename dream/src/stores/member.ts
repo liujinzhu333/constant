@@ -169,7 +169,7 @@ export const useMemberStore = defineStore('member', () => {
     }
   }
 
-  async function addRelation(data: { from_id: string; to_id: string; label?: string }) {
+  async function addRelation(data: { from_id: string; to_id: string; label?: string; reverse_label?: string }) {
     await window.dreamAPI.member.relationAdd(JSON.parse(JSON.stringify(data)))
     // 重新拉取确保双向写入已完成
     relations.value = await window.dreamAPI.member.relationList(data.from_id) as unknown as MemberRelationRow[]

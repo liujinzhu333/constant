@@ -608,8 +608,8 @@ export class BusinessIpc {
       `).all(memberId)
     })
 
-    // 新增关联（服务端事务，双向插入）
-    ipcMain.handle('member:relationAdd', (_e, data: { from_id: string; to_id: string; label?: string }) => {
+    // 新增关联（服务端事务，双向插入，正反 label 独立）
+    ipcMain.handle('member:relationAdd', (_e, data: { from_id: string; to_id: string; label?: string; reverse_label?: string }) => {
       const idAB = uuid()
       const idBA = uuid()
       const t = now()
@@ -618,7 +618,7 @@ export class BusinessIpc {
       `)
       this.db.transaction(() => {
         insert.run(idAB, data.from_id, data.to_id, data.label ?? '', t)
-        insert.run(idBA, data.to_id, data.from_id, data.label ?? '', t)
+        insert.run(idBA, data.to_id, data.from_id, data.reverse_label ?? data.label ?? '', t)
       })()
       return { ok: true }
     })

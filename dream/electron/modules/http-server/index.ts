@@ -821,14 +821,14 @@ export class LocalHttpServer {
       `).all(memberId))
     }
 
-    // POST /api/member-relations  （服务端事务，双向写入）
+    // POST /api/member-relations  （服务端事务，双向写入，正反 label 独立）
     if ((m = matchRoute(method, url, '/api/member-relations', 'POST')).matched) {
       const d = await readBody(req)
       const idAB = uuid(); const idBA = uuid(); const t = now()
       const ins = db.prepare(`INSERT OR IGNORE INTO member_relations (id,from_id,to_id,label,created_at) VALUES (?,?,?,?,?)`)
       db.transaction(() => {
         ins.run(idAB, d.from_id, d.to_id, d.label??'', t)
-        ins.run(idBA, d.to_id, d.from_id, d.label??'', t)
+        ins.run(idBA, d.to_id, d.from_id, d.reverse_label??d.label??'', t)
       })()
       return json(res, 201, { ok: true })
     }

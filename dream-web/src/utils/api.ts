@@ -664,7 +664,7 @@ export const memberRelationApi = {
   list(memberId: string): Promise<MemberRelationRow[]> {
     return http.get(`/api/member-relations?member_id=${memberId}`)
   },
-  add(data: { from_id: string; to_id: string; label?: string }): Promise<{ ok: boolean }> {
+  add(data: { from_id: string; to_id: string; label?: string; reverse_label?: string }): Promise<{ ok: boolean }> {
     return http.post('/api/member-relations', data)
   },
   delete(fromId: string, toId: string): Promise<{ ok: boolean }> {
